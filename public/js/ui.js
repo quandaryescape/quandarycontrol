@@ -268,6 +268,73 @@
     return `<span class="room-avatar ${esc(className)}" style="${base}background:${accent};color:${QC.contrastText(accent)};font-size:${Math.round(size * 0.4)}px">${esc(QC.roomInitials(room && room.name))}</span>`;
   };
 
+  /* ---------------------------------------------------------- room favicon */
+  QC.setFavicon = function (href) {
+    let link = document.querySelector('link[rel~="icon"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.type = href.startsWith('data:image/svg') ? 'image/svg+xml' : 'image/png';
+    link.href = href;
+  };
+
+  /** Rounded square in the room colour with the room's initials. */
+  QC.roomFaviconSvg = function (room) {
+    const accent = QC.roomAccent(room);
+    const initials = QC.roomInitials(room && room.name).replace(/[&<>"']/g, '');
+    const size = initials.length > 1 ? 27 : 34;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${accent}"/>` +
+      `<text x="32" y="${initials.length > 1 ? 42 : 44}" font-size="${size}" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="middle" fill="${QC.contrastText(accent)}">${initials}</text></svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  };
+
+  /**
+   * Browser-tab icon for a room: its uploaded icon (cropped square, ringed in the
+   * room colour, like the dashboard) or coloured initials when it has none.
+   */
+  QC.setRoomFavicon = async function (room) {
+    const icon = room && room.appearance && room.appearance.icon;
+    if (!icon) { QC.setFavicon(QC.roomFaviconSvg(room)); return; }
+    try {
+      const img = new Image();
+      img.src = icon;
+      await img.decode();
+      const S = 64, R = 14, ring = 5;
+      const c = document.createElement('canvas');
+      c.width = S; c.height = S;
+      const ctx = c.getContext('2d');
+      const rounded = (inset) => {
+        const x = inset, y = inset, w = S - inset * 2, r = R - inset / 2;
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + w, r);
+        ctx.arcTo(x + w, y + w, x, y + w, r);
+        ctx.arcTo(x, y + w, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      };
+      ctx.save();
+      rounded(0);
+      ctx.clip();
+      ctx.fillStyle = '#1d222d';
+      ctx.fillRect(0, 0, S, S);
+      // cover-crop the image into the square (SVGs without a size report 0)
+      const iw = img.naturalWidth || S, ih = img.naturalHeight || S;
+      const scale = Math.max(S / iw, S / ih);
+      ctx.drawImage(img, (S - iw * scale) / 2, (S - ih * scale) / 2, iw * scale, ih * scale);
+      ctx.restore();
+      rounded(ring / 2);
+      ctx.lineWidth = ring;
+      ctx.strokeStyle = QC.roomAccent(room);
+      ctx.stroke();
+      QC.setFavicon(c.toDataURL('image/png'));
+    } catch (_) {
+      QC.setFavicon(QC.roomFaviconSvg(room));
+    }
+  };
+
   QC.timerFont = function (key) {
     return QC.TIMER_FONTS.find(f => f.v === key) || QC.TIMER_FONTS[0];
   };

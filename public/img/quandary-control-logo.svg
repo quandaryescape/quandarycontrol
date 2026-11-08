@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 40 3380 3380" role="img" aria-label="Quandary Control">
+  <!-- Quandary "Q" with an eye cut out of it (negative space) and a purple iris. For dark backgrounds. -->
+  <defs>
+    <mask id="qc-eye-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="3456" height="3456">
+      <rect x="0" y="0" width="3456" height="3456" fill="#fff"/>
+      <path fill="#000" d="M94.4,1507.2 Q1474.4,387.2 2854.4,1507.2 Q1474.4,2627.2 94.4,1507.2 Z"/>
+    </mask>
+  </defs>
+  <path fill="#FAFAFA" mask="url(#qc-eye-cut)" d="M2509.9,2457.3c240.8-251.2,377.7-594,377.7-950.8c0-775.4-633.9-1405.9-1413.2-1405.9S61.3,731.7,61.3,1507.2c0,503.8,253.6,937.7,643.2,1185.5l317.7-317.7c-306.6-165-516-492-516-867.8c0-559.8,416.3-981.9,968.2-981.9c552,0,968.2,424.7,968.2,984.5c0,195.6-74.3,462-239.1,638l-306.8,237.6l509.7,526.5h566.8L2509.9,2457.3z"/>
+  <polygon fill="#673AB7" points="3394.7,3355.4 2836.1,3355.4 2533.1,3047.1 3091.7,3047.1"/>
+  <path fill="#673AB7" fill-rule="evenodd" d="M959.2,1507.2 a515.2,515.2 0 1,0 1030.4,0 a515.2,515.2 0 1,0 -1030.4,0 Z M1261.6,1507.2 a212.8,212.8 0 1,0 425.6,0 a212.8,212.8 0 1,0 -425.6,0 Z"/>
+</svg>

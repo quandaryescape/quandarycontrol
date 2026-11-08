@@ -756,6 +756,8 @@
     const r = S.room;
     QC.applyRoomAppearance(r);
     $('#room-icon').innerHTML = QC.roomAvatar(r, { size: 32, radius: 9 });
+    // Browser tab shows this room's icon (or its colour + initials) so GMs can tell tabs apart
+    QC.setRoomFavicon(r);
     $('#room-name').textContent = r.name;
     $('#room-code').innerHTML = html`<i class="icon-link"></i>${r.shortcode}`;
     $('#room-code').onclick = () => copy(`${location.origin}/p/${r.shortcode}`, 'Player link copied');
