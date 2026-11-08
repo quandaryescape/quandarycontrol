@@ -10,7 +10,7 @@ body.gm { min-height: 100vh; background-attachment: fixed; background-size: cove
   border-bottom: 1px solid var(--border);
 }
 .gm-room { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.gm-room h1::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--room-accent, var(--accent)); margin-right: 9px; vertical-align: 2px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--room-accent, var(--accent)) 25%, transparent); }
+.gm-room-icon { display: inline-flex; flex: none; }
 .gm-stripe { position: sticky; top: 58px; z-index: 29; height: 4px; }
 .gm-room h1 { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gm-conn { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-muted); }

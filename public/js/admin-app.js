@@ -28,9 +28,6 @@
     const f = QC.timerFont(room.appearance && room.appearance.timerFont);
     return `font-family:${esc(f.family)};font-weight:${f.weight};letter-spacing:${f.tracking}`;
   }
-  function initials(name) {
-    return String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
-  }
   function origin() {
     return location.origin;
   }
@@ -82,7 +79,7 @@
   function renderQuickRooms() {
     const host = document.getElementById('quick-rooms');
     host.innerHTML = state.rooms.slice(0, 6).map(r => html`
-      <a class="nav-item" href="/room/${r.id}/gm" title="Open GM for ${r.name}"><span class="dot" style="background:${QC.roomAccent(r)}"></span><span class="truncate">${r.name}</span></a>`).join('')
+      <a class="nav-item" href="/room/${r.id}/gm" title="Open GM for ${r.name}">${raw(QC.roomAvatar(r, { size: 20, radius: 6 }))}<span class="truncate">${r.name}</span></a>`).join('')
       || '<div class="faint small" style="padding:0 10px">No rooms yet</div>';
   }
 
@@ -148,7 +145,7 @@
     return html`
       <article class="card card-hover room-card" data-id="${r.id}" style="--room-accent:${accent};--room-accent-text:${QC.contrastText(accent)}">
         <div class="rc-top">
-          <div class="rc-avatar" style="background:${accent};color:${QC.contrastText(accent)}">${initials(r.name)}</div>
+          ${raw(QC.roomAvatar(r, { size: 42, radius: 12, className: 'rc-avatar' }))}
           <div class="grow">
             <h3 class="truncate">${r.name}</h3>
             <div class="rc-meta">
@@ -406,10 +403,11 @@
 
       appearance() {
         panel.innerHTML = '';
-        const intro = QC.el('<p class="muted small mb-16">Give each room its own colour so Game Masters running several rooms always know which console they are looking at.</p>');
-        const preview = QC.el('<div class="look-preview"><div class="lp-bar"></div><div class="lp-body"><span class="lp-name"></span><span class="lp-timer">45:00</span><span class="lp-btn">Start game</span></div></div>');
+        const intro = QC.el('<p class="muted small mb-16">Give each room its own icon and colour so Game Masters running several rooms always know which console they are looking at.</p>');
+        const preview = QC.el('<div class="look-preview"><div class="lp-bar"></div><div class="lp-body"><span class="lp-icon"></span><span class="lp-name"></span><span class="lp-timer">45:00</span><span class="lp-btn">Start game</span></div></div>');
         function paintPreview() {
           const accent = QC.roomAccent({ id: room.id, appearance: draft.appearance });
+          preview.querySelector('.lp-icon').innerHTML = QC.roomAvatar({ id: room.id, name: draft.name, appearance: draft.appearance }, { size: 34, radius: 9 });
           const font = QC.timerFont(draft.appearance.timerFont);
           const bg = draft.appearance.background || 'var(--bg)';
           preview.style.setProperty('--lp-accent', accent);

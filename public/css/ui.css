@@ -571,3 +571,8 @@ dialog.modal.modal-sm { width: min(420px, calc(100vw - 32px)); }
 .insp-row { display: flex; align-items: center; gap: 8px; }
 .insp-row > .label { width: 92px; flex: none; }
 .text-help { font-size: 11.5px; color: var(--text-faint); }
+
+/* ------------------------------------------------------------- room avatar */
+.room-avatar { display: inline-grid; place-items: center; flex: none; overflow: hidden; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.room-avatar.has-img { background: var(--surface-3); box-shadow: 0 0 0 2px var(--ra, var(--accent)); }
+.room-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }

@@ -253,6 +253,21 @@
     return palette[h % palette.length];
   };
 
+  QC.roomInitials = function (name) {
+    return String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+  };
+
+  /** Room icon: the uploaded image if there is one, otherwise initials on the room colour. */
+  QC.roomAvatar = function (room, { size = 42, radius = 12, className = '' } = {}) {
+    const accent = QC.roomAccent(room);
+    const icon = room && room.appearance && room.appearance.icon;
+    const base = `width:${size}px;height:${size}px;border-radius:${radius}px;--ra:${accent};`;
+    if (icon) {
+      return `<span class="room-avatar has-img ${esc(className)}" style="${base}"><img src="${esc(icon)}" alt="" loading="lazy" decoding="async"></span>`;
+    }
+    return `<span class="room-avatar ${esc(className)}" style="${base}background:${accent};color:${QC.contrastText(accent)};font-size:${Math.round(size * 0.4)}px">${esc(QC.roomInitials(room && room.name))}</span>`;
+  };
+
   QC.timerFont = function (key) {
     return QC.TIMER_FONTS.find(f => f.v === key) || QC.TIMER_FONTS[0];
   };
@@ -318,6 +333,14 @@
       const bgLabel = (QC.ROOM_BACKGROUNDS.find(b => b.v === (a.background || '')) || { label: 'Custom' }).label;
       wrap.innerHTML = `
         <div class="field">
+          <label>Room icon <span class="faint">– shown next to the room name on the dashboard and GM console</span></label>
+          <div class="row">
+            ${QC.roomAvatar({ id: room && room.id, name: room && room.name, appearance: a }, { size: 52, radius: 14 })}
+            <button type="button" class="btn btn-sm" data-icon-pick><i class="icon-image-up"></i>${a.icon ? 'Change image' : 'Upload image'}</button>
+            ${a.icon ? '<button type="button" class="btn btn-ghost btn-sm" data-icon-clear>Use initials instead</button>' : '<span class="faint small">Square images work best (PNG, JPG, SVG…)</span>'}
+          </div>
+        </div>
+        <div class="field">
           <label>Room colour <span class="faint">– highlights, buttons and the room badge</span></label>
           <div class="swatch-row">
             ${QC.ROOM_COLORS.map(c => `<button type="button" class="swatch ${a.accent === c ? 'active' : ''}" style="--sw:${c}" data-accent="${c}" aria-label="${c}"></button>`).join('')}
@@ -341,6 +364,14 @@
               <span class="font-name">${f.label}</span></button>`).join('')}
           </div>
         </div>`;
+      wrap.querySelector('[data-icon-pick]').onclick = async () => {
+        const picked = await QC.pickMedia({ roomId: room && room.id, accept: 'image/*', types: ['image'], category: 'icon', title: 'Room icon' });
+        if (!picked) return;
+        a.icon = picked.url;
+        changed();
+      };
+      const iconClear = wrap.querySelector('[data-icon-clear]');
+      if (iconClear) iconClear.onclick = () => { a.icon = null; changed(); };
       wrap.querySelectorAll('[data-accent]').forEach(b => b.onclick = () => { a.accent = b.dataset.accent; changed(); });
       wrap.querySelector('[data-accent-custom]').oninput = (e) => { a.accent = e.target.value; changed(false); };
       wrap.querySelector('[data-accent-custom]').onchange = () => draw();
@@ -615,7 +646,7 @@
    * Let the user choose an uploaded file from the room library or upload a new one.
    * Resolves with { url, type, name } or null.
    */
-  QC.pickMedia = async function ({ roomId, accept = 'image/*,video/*', title = 'Choose media', types } = {}) {
+  QC.pickMedia = async function ({ roomId, accept = 'image/*,video/*', title = 'Choose media', types, category } = {}) {
     let items = [];
     if (roomId) {
       try { items = await QC.get(`/api/v2/rooms/${encodeURIComponent(roomId)}/media`); } catch (_) { items = []; }
@@ -647,7 +678,7 @@
           onFiles: async (files) => {
             prog.classList.remove('hidden');
             try {
-              const [up] = await QC.upload(files, { roomId, onProgress: p => { prog.firstElementChild.style.width = `${Math.round(p * 100)}%`; } });
+              const [up] = await QC.upload(files, { roomId, category, onProgress: p => { prog.firstElementChild.style.width = `${Math.round(p * 100)}%`; } });
               close({ url: up.url, type: up.type, name: up.name });
             } catch (err) {
               QC.error(err);

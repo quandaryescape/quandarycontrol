@@ -19,12 +19,6 @@
   align-items: flex-start;
   cursor: pointer;
 }
-.room-card .rc-avatar {
-  width: 42px; height: 42px; border-radius: 12px; flex: none;
-  display: grid; place-items: center;
-  font-weight: 700; font-size: 17px; color: #fff;
-  background: linear-gradient(135deg, var(--c1, #8b7cf6), var(--c2, #5b8def));
-}
 .room-card h3 { font-size: 15.5px; margin-bottom: 3px; }
 .room-card .rc-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
@@ -130,8 +124,11 @@
 /* Room colour */
 .room-card::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 3px; background: var(--room-accent, var(--accent)); }
 .room-card .rc-avatar { box-shadow: 0 4px 14px color-mix(in srgb, var(--room-accent, var(--accent)) 35%, transparent); }
+.room-card .rc-avatar.has-img { box-shadow: 0 0 0 2px var(--ra), 0 4px 14px color-mix(in srgb, var(--room-accent, var(--accent)) 35%, transparent); }
+.look-preview .lp-icon { display: inline-flex; }
 .room-card .rc-actions .btn-primary { background: var(--room-accent, var(--accent)); color: var(--room-accent-text, #fff); }
-#quick-rooms .nav-item .dot { width: 9px; height: 9px; margin: 0 4px; box-shadow: none; }
+#quick-rooms .nav-item .room-avatar { font-size: 9px !important; }
+#quick-rooms .nav-item .room-avatar.has-img { box-shadow: 0 0 0 1.5px var(--ra); }
 
 .look-preview { --lp-accent: var(--accent); --lp-bg: var(--bg); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-strong); margin-bottom: 20px; background: var(--lp-bg); }
 .look-preview .lp-bar { height: 4px; background: var(--lp-accent); }

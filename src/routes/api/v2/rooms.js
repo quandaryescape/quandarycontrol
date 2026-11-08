@@ -47,6 +47,8 @@ function cleanPresets(presets) {
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+// Room icons must be files uploaded to this server (no external or script URLs)
+const ICON_URL = /^\/(uploads|themes\/[A-Za-z0-9_-]+\/assets)\/[\w.%-]+\.(png|jpe?g|gif|webp|svg|avif)$/i;
 const TIMER_FONTS = new Set(['inter', 'oswald', 'orbitron', 'bebas', 'rajdhani', 'jetbrains', 'system']);
 
 function cleanAppearance(input = {}, current = {}) {
@@ -54,6 +56,10 @@ function cleanAppearance(input = {}, current = {}) {
   if (input.accent !== undefined) out.accent = HEX.test(input.accent || '') ? input.accent.toLowerCase() : null;
   if (input.background !== undefined) out.background = HEX.test(input.background || '') ? input.background.toLowerCase() : null;
   if (input.timerFont !== undefined) out.timerFont = TIMER_FONTS.has(input.timerFont) ? input.timerFont : 'inter';
+  if (input.icon !== undefined) {
+    if (input.icon && !ICON_URL.test(input.icon)) throw httpError(400, 'Room icon must be an image uploaded to Quandary Control');
+    out.icon = input.icon || null;
+  }
   return out;
 }
 
@@ -72,7 +78,8 @@ function toRoomDTO(row, { includeVariables = true } = {}) {
     appearance: {
       accent: (config.appearance && config.appearance.accent) || null,
       background: (config.appearance && config.appearance.background) || null,
-      timerFont: (config.appearance && config.appearance.timerFont) || 'inter'
+      timerFont: (config.appearance && config.appearance.timerFont) || 'inter',
+      icon: (config.appearance && config.appearance.icon) || null
     },
     timer: {
       duration: row.timer_duration || 0,
@@ -173,7 +180,7 @@ router.get('/rooms/:id', asyncRoute(async (req, res) => {
 router.get('/rooms/:id/public', asyncRoute(async (req, res) => {
   const room = resolveRoom(req.params.id);
   const dto = toRoomDTO(room, { includeVariables: false });
-  ok(res, { id: dto.id, name: dto.name, shortcode: dto.shortcode, theme: dto.theme, hints: { type: dto.hints.type }, slideshows: dto.stats.slideshows, appearance: { accent: dto.appearance.accent } });
+  ok(res, { id: dto.id, name: dto.name, shortcode: dto.shortcode, theme: dto.theme, hints: { type: dto.hints.type }, slideshows: dto.stats.slideshows, appearance: { accent: dto.appearance.accent, icon: dto.appearance.icon } });
 }));
 
 router.put('/rooms/:id', asyncRoute(async (req, res) => {

@@ -428,3 +428,26 @@ describe('realtime (socket.io)', () => {
     expect(update.duration).toBe(660);
   });
 });
+
+describe('room icon', () => {
+  test('accepts uploaded images, rejects anything else, and can be cleared', async () => {
+    const room = await createRoom();
+    const ok = await request(app).put(`/api/v2/rooms/${room.id}`).send({ appearance: { icon: '/uploads/1757_abc123.png' } });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.appearance.icon).toBe('/uploads/1757_abc123.png');
+
+    const pub = await request(app).get(`/api/v2/rooms/${room.shortcode}/public`);
+    expect(pub.body.data.appearance.icon).toBe('/uploads/1757_abc123.png');
+
+    for (const bad of ['https://evil.example/x.png', 'javascript:alert(1)', '/uploads/../db/quandary.db', '/uploads/page.html']) {
+      const res = await request(app).put(`/api/v2/rooms/${room.id}`).send({ appearance: { icon: bad } });
+      expect(res.status).toBe(400);
+    }
+
+    // other appearance settings are kept when only the icon changes
+    await request(app).put(`/api/v2/rooms/${room.id}`).send({ appearance: { accent: '#f2555a' } });
+    const cleared = await request(app).put(`/api/v2/rooms/${room.id}`).send({ appearance: { icon: null } });
+    expect(cleared.body.data.appearance.icon).toBeNull();
+    expect(cleared.body.data.appearance.accent).toBe('#f2555a');
+  });
+});

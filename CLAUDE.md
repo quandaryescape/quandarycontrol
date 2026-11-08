@@ -67,7 +67,7 @@ Some older suites (`tests/integration/*`, `tests/secondary-timer.spec.js`) were 
 - Slides render through one shared renderer (`js/slideshow-render.js` + `css/slideshow.css`, container-query units with vw/vh fallbacks for old TV browsers).
 - Theme Builder: Visual / Code / AI share one draft with undo/redo. The preview iframe runs `js/theme-preview-bridge.js` (selection, toolbar, drag/drop targeting, instant CSS). Visual-editor styles live in a managed block in `style.css` between `/* === qb:visual-start === */` and `/* === qb:visual-end === */`, keyed by `qb-xxxxxx` classes.
 - Every themed player page also gets `js/player-overlays.js` (styled messages, slideshow launch, remote reload).
-- Per-room appearance (`config.appearance = { accent, background, timerFont }`) colours the dashboard card and tints the GM console so GMs can tell rooms apart.
+- Per-room appearance (`config.appearance = { accent, background, timerFont, icon }`) colours the dashboard card and tints the GM console so GMs can tell rooms apart. `icon` must be an image uploaded to this server (`/uploads/…` or a theme asset); `QC.roomAvatar()` renders it, falling back to initials.
 - The legacy grid layout system in `player.js` only runs if a theme opts in with `<body data-legacy-layout="true">`.
 
 ## Development notes

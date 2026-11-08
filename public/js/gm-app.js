@@ -445,7 +445,8 @@
   /* =================================================================== media */
   async function loadMedia() {
     try {
-      S.media = (await get(`/api/v2/rooms/${roomId}/media`)).filter(m => m.type === 'image' || m.type === 'video');
+      S.media = (await get(`/api/v2/rooms/${roomId}/media`))
+        .filter(m => (m.type === 'image' || m.type === 'video') && (m.metadata && m.metadata.category) !== 'icon');
     } catch (_) { S.media = []; }
     drawMedia();
   }
@@ -739,6 +740,7 @@
     }
     const r = S.room;
     QC.applyRoomAppearance(r);
+    $('#room-icon').innerHTML = QC.roomAvatar(r, { size: 32, radius: 9 });
     $('#room-name').textContent = r.name;
     $('#room-code').innerHTML = html`<i class="icon-link"></i>${r.shortcode}`;
     $('#room-code').onclick = () => copy(`${location.origin}/p/${r.shortcode}`, 'Player link copied');
