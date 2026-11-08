@@ -1,5 +1,7 @@
 // Global test setup
 process.env.LOG_LEVEL = process.env.LOG_LEVEL || 'error';
+// Never let tests open (and migrate) the real db/quandary.db
+process.env.QUANDARY_DB_PATH = process.env.QUANDARY_DB_PATH || ':memory:';
 const { closeDatabase } = require('../db/database');
 
 // Set test environment
