@@ -178,7 +178,7 @@ async function editTheme(args) {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/strykerx/quandarycontrol',
+      'HTTP-Referer': 'https://github.com/quandaryescape/quandarycontrol',
       'X-Title': 'Quandary Control Theme Builder'
     },
     body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 32000 }),
