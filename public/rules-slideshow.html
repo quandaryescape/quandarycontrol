@@ -3,343 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rules Slideshow - Quandary Control</title>
-    <link rel="stylesheet" href="/styles.css">
-    <style>
-        /* Slideshow Specific Styles */
-        .slideshow-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: var(--bg-dark);
-            display: flex;
-            flex-direction: column;
-            z-index: 9999;
-        }
-
-        .slideshow-header {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 1rem 2rem;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
-            z-index: 10;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .slideshow-title {
-            color: var(--text-light);
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-
-        .slideshow-counter {
-            color: var(--text-muted);
-            font-size: 1rem;
-        }
-
-        .slideshow-main {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .slide {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            transition: opacity 0.5s ease-in-out;
-        }
-
-        .slide.active {
-            opacity: 1;
-        }
-
-        .slide-media {
-            max-width: 90%;
-            max-height: 80vh;
-            object-fit: contain;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-        }
-
-        .slide-media.video {
-            background: #000;
-        }
-
-        /* TV Mode Optimizations - Disable expensive effects */
-        body.tv-mode .slide {
-            transition: none; /* Instant transitions on TV */
-        }
-
-        body.tv-mode .slide-media {
-            border-radius: 0; /* No border radius to avoid compositing */
-            box-shadow: none; /* No shadows */
-        }
-
-        body.tv-mode .slide-media.video {
-            /* Hardware acceleration hints */
-            transform: translateZ(0);
-            will-change: transform;
-            /* Full viewport for better hardware decoder performance */
-            max-width: 100vw;
-            max-height: 100vh;
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-
-        body.tv-mode .nav-arrow,
-        body.tv-mode .close-button {
-            backdrop-filter: none; /* Remove blur effects */
-            background: rgba(0, 0, 0, 0.6); /* Solid background instead */
-        }
-
-        body.tv-mode .slideshow-header,
-        body.tv-mode .slideshow-controls {
-            backdrop-filter: none; /* Remove blur */
-            background: linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.3)); /* Simpler gradient */
-        }
-
-        .slideshow-controls {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 2rem;
-            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
-            z-index: 10;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 2rem;
-        }
-
-        .nav-arrow {
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            color: var(--text-light);
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 1.5rem;
-            backdrop-filter: blur(10px);
-        }
-
-        .nav-arrow:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: var(--player-primary);
-            transform: scale(1.1);
-        }
-
-        .nav-arrow:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-        }
-
-        .nav-arrow:disabled:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.2);
-            transform: scale(1);
-        }
-
-        .slide-indicators {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.3);
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .indicator.active {
-            background: var(--player-primary);
-            transform: scale(1.2);
-        }
-
-        .close-button {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            color: var(--text-light);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 1.2rem;
-            z-index: 20;
-            backdrop-filter: blur(10px);
-        }
-
-        .close-button:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: var(--player-accent);
-            transform: scale(1.1);
-        }
-
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: var(--text-muted);
-            font-size: 1.2rem;
-        }
-
-        .error {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: var(--player-accent);
-            font-size: 1.2rem;
-            text-align: center;
-        }
-
-        .completion-message {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            color: var(--text-light);
-            z-index: 15;
-        }
-
-        .completion-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            background: var(--player-primary);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .completion-text {
-            font-size: 1.2rem;
-            color: var(--text-muted);
-            margin-bottom: 2rem;
-        }
-
-        .continue-button {
-            background: var(--player-primary);
-            color: var(--text-light);
-            border: none;
-            padding: 1rem 2rem;
-            border-radius: 30px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: var(--shadow);
-        }
-
-        .continue-button:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-glow);
-        }
-
-        @media (max-width: 768px) {
-            .slideshow-header {
-                padding: 0.75rem 1rem;
-            }
-
-            .slideshow-title {
-                font-size: 1.2rem;
-            }
-
-            .slideshow-counter {
-                font-size: 0.9rem;
-            }
-
-            .nav-arrow {
-                width: 40px;
-                height: 40px;
-                font-size: 1.2rem;
-            }
-
-            .slideshow-controls {
-                padding: 1rem;
-                gap: 1rem;
-            }
-
-            .close-button {
-                width: 35px;
-                height: 35px;
-                font-size: 1rem;
-            }
-
-            .completion-title {
-                font-size: 2rem;
-            }
-
-            .completion-text {
-                font-size: 1rem;
-            }
-        }
-    </style>
+    <title>Slideshow</title>
+    <link rel="stylesheet" href="/vendor/lucide/lucide.css">
+    <link rel="stylesheet" href="/css/slideshow.css">
+    <link rel="stylesheet" href="/css/slideshow-player.css">
 </head>
 <body>
-    <div class="slideshow-container">
-        <header class="slideshow-header">
-            <h1 class="slideshow-title">Game Rules</h1>
-            <div class="slideshow-counter">
-                <span id="current-slide">1</span> / <span id="total-slides">1</span>
+    <div id="app" class="ssp">
+        <div class="ssp-loading" id="loading"><div class="spinner"></div></div>
+
+        <!-- Chooser: shown when a room has more than one slideshow -->
+        <section class="chooser" id="chooser" hidden>
+            <header class="chooser-head">
+                <div class="chooser-room" id="chooser-room"></div>
+                <h1>Choose a briefing</h1>
+                <p>Use the arrow keys, remote or touch to pick one.</p>
+            </header>
+            <div class="chooser-grid" id="chooser-grid" role="listbox"></div>
+            <footer class="chooser-foot"><button class="ghost-btn" id="chooser-back"><i class="icon-arrow-left"></i>Back to the game</button></footer>
+        </section>
+
+        <!-- Playback -->
+        <section class="player" id="player" hidden>
+            <div class="ss-frame ss-stage" id="stage"></div>
+            <div class="progress-segments" id="segments"></div>
+            <div class="player-controls" id="controls">
+                <button class="pc-btn" id="prev" aria-label="Previous slide"><i class="icon-chevron-left"></i></button>
+                <span class="pc-count"><span id="count-current">1</span> / <span id="count-total">1</span></span>
+                <button class="pc-btn" id="next" aria-label="Next slide"><i class="icon-chevron-right"></i></button>
+                <button class="pc-btn" id="pause" aria-label="Pause auto-advance" hidden><i class="icon-pause"></i></button>
+                <span class="pc-spacer"></span>
+                <button class="pc-btn" id="close" aria-label="Exit slideshow"><i class="icon-x"></i></button>
             </div>
-        </header>
-
-        <main class="slideshow-main" id="slideshow-main">
-            <div class="loading" id="loading">Loading rules...</div>
-            <div class="error" id="error" style="display: none;">
-                <p>No rules found</p>
-                <p>Please ask the game master to upload rules first</p>
+            <button class="unmute" id="unmute" hidden><i class="icon-volume-x"></i>Tap for sound</button>
+            <div class="the-end" id="the-end" hidden>
+                <h2>That's everything!</h2>
+                <div class="end-actions">
+                    <button class="big-btn" id="end-replay"><i class="icon-rotate-ccw"></i>Watch again</button>
+                    <button class="big-btn primary" id="end-continue"><i class="icon-play"></i>Start the game</button>
+                </div>
             </div>
-        </main>
+        </section>
 
-        <div class="completion-message" id="completion-message" style="display: none;">
-            <h2 class="completion-title">Rules Complete!</h2>
-            <p class="completion-text">You've reviewed all the game rules</p>
-            <button class="continue-button" id="continue-to-game">Continue to Game</button>
-        </div>
-
-        <nav class="slideshow-controls" id="slideshow-controls" style="display: none;">
-            <button class="nav-arrow" id="prev-slide">‹</button>
-            <div class="slide-indicators" id="slide-indicators"></div>
-            <button class="nav-arrow" id="next-slide">›</button>
-        </nav>
-
-        <button class="close-button" id="close-slideshow">×</button>
+        <section class="ssp-message" id="message" hidden>
+            <i class="icon-presentation"></i>
+            <h1 id="message-title">No slideshow yet</h1>
+            <p id="message-text">This room doesn't have a slideshow.</p>
+            <button class="big-btn primary" id="message-back"><i class="icon-arrow-left"></i>Back to the game</button>
+        </section>
     </div>
 
-    <script src="/rules-slideshow.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/slideshow-render.js"></script>
+    <script src="/js/slideshow-player.js"></script>
 </body>
 </html>

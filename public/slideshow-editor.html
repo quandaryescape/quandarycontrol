@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slideshow Studio · Quandary Control</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234fb3f6'/><text x='16' y='22' font-size='17' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>S</text></svg>">
+    <link rel="stylesheet" href="/vendor/lucide/lucide.css">
+    <link rel="stylesheet" href="/css/ui.css">
+    <link rel="stylesheet" href="/css/slideshow.css">
+    <link rel="stylesheet" href="/css/slideshow-editor.css">
+    <script src="/js/ui.js"></script>
+</head>
+<body>
+    <header class="topbar">
+        <a class="btn btn-ghost btn-icon" href="/" aria-label="Dashboard"><i class="icon-arrow-left"></i></a>
+        <nav class="crumbs"><a href="/">Rooms</a><span class="sep">/</span><strong id="room-name">…</strong><span class="sep">/</span><span>Slideshows</span></nav>
+        <div class="spacer"></div>
+        <span class="save-state small muted" id="save-state"></span>
+        <button class="btn btn-sm" id="preview-btn" disabled><i class="icon-play"></i>Preview</button>
+        <a class="btn btn-sm btn-ghost" id="gm-link"><i class="icon-gamepad-2"></i><span class="hide-sm">GM console</span></a>
+    </header>
+    <div class="room-stripe"></div>
+
+    <div class="studio">
+        <aside class="shows">
+            <div class="shows-head">
+                <h3 class="grow">Slideshows</h3>
+                <button class="btn btn-primary btn-sm" id="new-show"><i class="icon-plus"></i>New</button>
+            </div>
+            <div class="shows-list" id="shows-list"></div>
+            <div class="shows-foot small faint" id="shows-foot"></div>
+        </aside>
+
+        <main class="canvas" id="canvas">
+            <div class="empty" id="no-show">
+                <div class="empty-icon"><i class="icon-presentation"></i></div>
+                <h3>Create a slideshow</h3>
+                <p>Slideshows brief players before the game – rules, story, safety. Make as many as you like (e.g. adults, kids, another language); players pick one when there is more than one.</p>
+                <button class="btn btn-primary btn-lg mt-8" id="empty-new"><i class="icon-plus"></i>New slideshow</button>
+            </div>
+
+            <div class="canvas-inner" id="editor" hidden>
+                <div class="show-head">
+                    <div class="grow stack-sm" style="gap:2px">
+                        <input class="input show-name" id="show-name" aria-label="Slideshow name" maxlength="120">
+                        <input class="input show-desc" id="show-desc" placeholder="Short description shown on the chooser (optional)" maxlength="500">
+                    </div>
+                    <button class="btn btn-sm" id="show-settings"><i class="icon-sliders-horizontal"></i>Slideshow settings</button>
+                </div>
+
+                <div class="stage-wrap" id="stage-wrap">
+                    <div class="ss-frame ratio stage" id="stage"></div>
+                    <div class="drop-hint" id="drop-hint"><i class="icon-image-plus"></i>Drop images or videos to add slides</div>
+                </div>
+
+                <div class="filmstrip-wrap">
+                    <div class="filmstrip" id="filmstrip"></div>
+                    <div class="add-tiles">
+                        <button class="add-tile" id="add-text"><i class="icon-type"></i>Text</button>
+                        <button class="add-tile" id="add-media"><i class="icon-image-plus"></i>Images / video</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <aside class="inspector" id="inspector" hidden></aside>
+    </div>
+
+    <script src="/js/slideshow-render.js"></script>
+    <script src="/js/slideshow-editor.js"></script>
+</body>
+</html>

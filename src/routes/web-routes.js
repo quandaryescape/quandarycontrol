@@ -3,140 +3,101 @@ const path = require('path');
 const { logger } = require('../../utils/logger');
 const { getDatabase } = require('../../db/database');
 const ShortcodeParser = require('../../utils/shortcode-parser');
+const themeService = require('../services/theme-service');
+const previewStore = require('../services/preview-store');
 
 const router = express.Router();
 const webLogger = logger.child({ module: 'web-routes' });
+const PUBLIC = path.join(__dirname, '../../public');
+const parser = new ShortcodeParser();
 
-// Serve admin interface at root
-router.get('/', (req, res) => {
-  webLogger.debug('Admin interface requested', { ip: req.ip });
-  res.sendFile(path.join(__dirname, '../../public/admin.html'));
-});
+function page(file) {
+  return (req, res) => res.sendFile(path.join(PUBLIC, file));
+}
 
-// Android TV Portal route
-router.get('/tv', (req, res) => {
-  webLogger.debug('Android TV interface requested', { ip: req.ip });
-  res.sendFile(path.join(__dirname, '../../public/androidtv.html'));
-});
+function findRoom(idOrCode) {
+  const db = getDatabase();
+  return db.prepare('SELECT * FROM rooms WHERE id = ?').get(idOrCode)
+    || db.prepare('SELECT * FROM rooms WHERE shortcode = ?').get(String(idOrCode).toUpperCase());
+}
 
-// Dynamic room player routes
+function roomTheme(room) {
+  let config = {};
+  try { config = JSON.parse(room.config || '{}'); } catch (_) { config = {}; }
+  const theme = themeService.isValidSlug(config.theme) && themeService.exists(config.theme) ? config.theme : 'boilerplate';
+  return { config, theme };
+}
+
+// Operator tools
+router.get('/', page('admin.html'));
+router.get('/admin', page('admin.html'));
+router.get('/settings', (req, res) => res.redirect('/#settings'));
+router.get('/theme-builder', page('theme-builder.html'));
+router.get('/theme-builder/:slug', page('theme-builder.html'));
+router.get('/tv', page('androidtv.html'));
+
+router.get('/room/:roomId/gm', page('gm.html'));
+router.get('/room/:roomId/automations', page('automations.html'));
+router.get('/room/:roomId/slideshows', page('slideshow-editor.html'));
+// Old rules editor URL now opens the slideshow studio
+router.get('/room/:roomId/rules-editor', (req, res) => res.redirect(`/room/${encodeURIComponent(req.params.roomId)}/slideshows`));
+
+// Player-facing
+router.get('/room/:roomId/rules-slideshow', page('rules-slideshow.html'));
+router.get('/room/:roomId/slideshow/:slideshowId', page('rules-slideshow.html'));
+
 router.get('/room/:roomId/player', (req, res) => {
   try {
-    const { roomId } = req.params;
-    const db = getDatabase();
-    const room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(roomId);
-
+    const room = getDatabase().prepare('SELECT * FROM rooms WHERE id = ?').get(req.params.roomId);
     if (!room) {
-      webLogger.warn('Room not found for player route', { roomId, ip: req.ip });
-      return res.status(404).send('Room not found');
+      return res.status(404).sendFile(path.join(PUBLIC, 'player-not-found.html'));
+    }
+    const { config, theme } = roomTheme(room);
+    const roomData = { id: room.id, name: room.name, shortcode: room.shortcode, config };
+
+    // Theme builder live preview of an unsaved draft
+    const token = typeof req.query.themePreview === 'string' ? req.query.themePreview : null;
+    if (token) {
+      const draft = previewStore.get(token);
+      if (!draft) return res.status(410).send('Preview expired – make an edit in the Theme Builder to refresh it.');
+      const injectBody = [
+        req.query.demo === '1' ? '<script src="/js/theme-preview-demo.js"></script>' : '',
+        req.query.editor === '1' ? '<script src="/js/theme-preview-bridge.js"></script>' : ''
+      ].join('\n');
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(parser.renderDraft(draft, roomData, { injectBody, injectHead: '<script>window.QC_PREVIEW = true;</script>' }));
     }
 
-    webLogger.info('Player interface requested', { roomId, roomName: room.name, ip: req.ip });
-
-    // Parse room config to get theme
-    let config = {};
-    try {
-      config = JSON.parse(room.config || '{}');
-    } catch (error) {
-      webLogger.warn('Failed to parse room config', { roomId, error: error.message });
-    }
-
-    const themeName = config.theme || 'example-theme';
-    const parser = new ShortcodeParser();
-
-    // Room data for shortcode rendering
-    const roomData = {
-      id: room.id,
-      name: room.name,
-      shortcode: room.shortcode,
-      config: config
-    };
-
-    try {
-      const themedHTML = parser.loadTheme(themeName, roomData);
-      res.send(themedHTML);
-      webLogger.debug('Themed player interface served', { roomId, theme: themeName });
-    } catch (error) {
-      webLogger.error('Error loading theme', { roomId, theme: themeName, error: error.message });
-      // Fallback to default player.html
-      res.sendFile(path.join(__dirname, '../../public/player.html'));
-    }
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(parser.loadTheme(theme, roomData));
   } catch (error) {
-    webLogger.error('Error in player route', {
-      roomId: req.params.roomId,
-      error: error.message,
-      ip: req.ip
-    });
+    webLogger.error('Error in player route', { roomId: req.params.roomId, error: error.message });
     res.status(500).send('Server error');
   }
 });
 
 // Barebones player route (template-driven)
-router.get('/room/:roomId/player-bare', (req, res) => {
-  const { roomId } = req.params;
-  webLogger.debug('Bare player interface requested', { roomId, ip: req.ip });
-  res.sendFile(path.join(__dirname, '../../public/player-bare.html'));
-});
+router.get('/room/:roomId/player-bare', page('player-bare.html'));
 
 // Shortcode-based player access route
 router.get('/p/:shortcode', (req, res) => {
   try {
-    const { shortcode } = req.params;
-    const db = getDatabase();
-
-    webLogger.debug('Shortcode access requested', { shortcode, ip: req.ip });
-
-    // Check if shortcode is already a room ID (legacy support)
-    let room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(shortcode);
-
+    const room = findRoom(req.params.shortcode);
     if (!room) {
-      // Try to find by shortcode
-      room = db.prepare('SELECT * FROM rooms WHERE shortcode = ?').get(shortcode.toUpperCase());
+      return res.status(404).sendFile(path.join(PUBLIC, 'player-not-found.html'));
     }
-
-    if (!room) {
-      webLogger.warn('Room not found for shortcode', { shortcode, ip: req.ip });
-      return res.status(404).sendFile(path.join(__dirname, '../../public/player-not-found.html'));
-    }
-
-    webLogger.info('Shortcode resolved', {
-      shortcode,
-      roomId: room.id,
-      roomName: room.name,
-      ip: req.ip
-    });
-
-    // Redirect to room view with resolved room ID
     res.redirect(`/room/${room.id}/player`);
   } catch (error) {
-    webLogger.error('Error handling shortcode route', {
-      shortcode: req.params.shortcode,
-      error: error.message,
-      ip: req.ip
-    });
+    webLogger.error('Error handling shortcode route', { shortcode: req.params.shortcode, error: error.message });
     res.status(500).send('Server error');
   }
 });
 
-// Game Master interface
-router.get('/room/:roomId/gm', (req, res) => {
-  const { roomId } = req.params;
-  webLogger.debug('GM interface requested', { roomId, ip: req.ip });
-  res.sendFile(path.join(__dirname, '../../public/gm.html'));
-});
-
-// Rules editor route
-router.get('/room/:roomId/rules-editor', (req, res) => {
-  const { roomId } = req.params;
-  webLogger.debug('Rules editor requested', { roomId, ip: req.ip });
-  res.sendFile(path.join(__dirname, '../../public/rules-editor.html'));
-});
-
-// Rules slideshow route
-router.get('/room/:roomId/rules-slideshow', (req, res) => {
-  const { roomId } = req.params;
-  webLogger.debug('Rules slideshow requested', { roomId, ip: req.ip });
-  res.sendFile(path.join(__dirname, '../../public/rules-slideshow.html'));
+// Short link straight to a room's slideshow(s)
+router.get('/s/:shortcode', (req, res) => {
+  const room = findRoom(req.params.shortcode);
+  if (!room) return res.status(404).sendFile(path.join(PUBLIC, 'player-not-found.html'));
+  res.redirect(`/room/${room.id}/rules-slideshow`);
 });
 
 module.exports = router;

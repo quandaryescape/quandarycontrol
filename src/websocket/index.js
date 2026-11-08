@@ -3,32 +3,26 @@ const { setupRoomHandlers } = require('./handlers/room-handlers');
 const { setupTimerHandlers } = require('./handlers/timer-handlers');
 const { setupChatHandlers } = require('./handlers/chat-handlers');
 const { setupLayoutHandlers } = require('./handlers/layout-handlers');
+const { setupControlHandlers } = require('./handlers/control-handlers');
 
 /**
  * Initialize WebSocket server with all handlers
  */
-function initializeWebSocket(io, timerService) {
+function initializeWebSocket(io, timerService, services = {}) {
   const wsLogger = logger.child({ module: 'websocket-main' });
 
-  wsLogger.info('Initializing WebSocket server');
-
   io.on('connection', (socket) => {
-    const connectionInfo = {
+    wsLogger.debug('New WebSocket connection', {
       socketId: socket.id,
-      ip: socket.handshake.address,
-      userAgent: socket.handshake.headers['user-agent']?.substring(0, 100)
-    };
+      ip: socket.handshake.address
+    });
 
-    wsLogger.info('New WebSocket connection', connectionInfo);
-
-    // Set up all handler modules
     try {
-      setupRoomHandlers(socket, io, timerService);
+      setupRoomHandlers(socket, io, timerService, services);
       setupTimerHandlers(socket, io, timerService);
-      setupChatHandlers(socket, io);
+      setupChatHandlers(socket, io, services);
       setupLayoutHandlers(socket, io);
-
-      wsLogger.debug('WebSocket handlers initialized', { socketId: socket.id });
+      setupControlHandlers(socket, io, services);
     } catch (error) {
       wsLogger.error('Error setting up WebSocket handlers', {
         socketId: socket.id,
@@ -37,7 +31,6 @@ function initializeWebSocket(io, timerService) {
       });
     }
 
-    // Handle connection errors
     socket.on('error', (error) => {
       wsLogger.error('WebSocket error', {
         socketId: socket.id,
@@ -47,28 +40,20 @@ function initializeWebSocket(io, timerService) {
       });
     });
 
-    // Handle disconnection
     socket.on('disconnect', (reason) => {
-      wsLogger.info('WebSocket disconnection', {
+      wsLogger.debug('WebSocket disconnection', {
         socketId: socket.id,
         reason,
         roomId: socket.roomId,
-        clientType: socket.clientType,
-        duration: Date.now() - socket.handshake.time
+        clientType: socket.clientType
       });
     });
   });
 
-  // Handle server-level WebSocket errors
   io.engine.on('connection_error', (err) => {
-    wsLogger.error('WebSocket connection error', {
-      code: err.code,
-      message: err.message,
-      context: err.context
-    });
+    wsLogger.warn('WebSocket connection error', { code: err.code, message: err.message });
   });
 
-  wsLogger.info('WebSocket server initialized successfully');
   return io;
 }
 

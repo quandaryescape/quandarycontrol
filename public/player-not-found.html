@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Room not found</title>
+    <style>
+        html, body { margin: 0; height: 100%; background: #07080b; color: #fff; font-family: system-ui, "Segoe UI", sans-serif; }
+        main { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6vw; gap: 18px; box-sizing: border-box; }
+        .icon { font-size: 64px; }
+        h1 { margin: 0; font-size: clamp(28px, 4vw, 52px); }
+        p { margin: 0; color: rgba(255,255,255,.6); font-size: clamp(16px, 1.6vw, 22px); max-width: 640px; line-height: 1.5; }
+        form { display: flex; gap: 10px; margin-top: 10px; }
+        input { font: inherit; font-size: 22px; text-transform: uppercase; letter-spacing: .2em; text-align: center; width: 200px; padding: 12px 14px; border-radius: 12px; border: 2px solid rgba(255,255,255,.2); background: rgba(255,255,255,.06); color: #fff; }
+        input:focus { outline: none; border-color: #8b7cf6; }
+        button { font: inherit; font-size: 18px; font-weight: 700; padding: 12px 22px; border-radius: 12px; border: 0; background: #8b7cf6; color: #fff; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="icon" aria-hidden="true">🔒</div>
+        <h1>We couldn't find that room</h1>
+        <p>The room code may have changed. Ask your Game Master for the current code and enter it below.</p>
+        <form onsubmit="event.preventDefault(); var c = this.code.value.trim(); if (c) location.href = '/p/' + encodeURIComponent(c);">
+            <input name="code" placeholder="CODE" maxlength="8" autocomplete="off" autofocus aria-label="Room code">
+            <button type="submit">Join</button>
+        </form>
+    </main>
+</body>
+</html>

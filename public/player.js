@@ -1,6 +1,16 @@
 const socket = io();
 window.socket = socket;
 
+// Text from hints, variables, webhooks and automations must never be parsed as HTML
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 console.log('Player.js loaded, socket initialized:', socket);
 
 // Test function to manually trigger lightbox (for debugging)
@@ -142,7 +152,7 @@ function joinRoom(id) {
     window.roomId = id;
     roomId = id; // Also update the local variable
     console.log('Joining room:', id);
-    socket.emit('join_room', { roomId: id, clientType: 'player' });
+    socket.emit('join_room', { roomId: id, clientType: window.QC_PREVIEW ? 'preview' : 'player' });
 
     // Update UI elements
     if (elements.roomInfo) {
@@ -271,11 +281,18 @@ function handleSecondaryTimerComplete() {
 }
 
 function handleVariableUpdate(update) {
-    variables[update.name] = {
-        'name': update.name,
-        'value': update.value,
-        'type': update.type || 'string'
-    };
+    if (!update) return;
+    if (update.variables && typeof update.variables === 'object') {
+        variables = {};
+        Object.entries(update.variables).forEach(([name, value]) => {
+            if (/^timer_(main|secondary)(_remaining)?$/.test(name)) return;
+            variables[name] = { name, value, type: typeof value };
+        });
+    } else if (update.name) {
+        if (update.deleted) delete variables[update.name];
+        else variables[update.name] = { name: update.name, value: update.value, type: update.type || 'string' };
+    }
+    if (!update.name) { renderVariables(); return; }
 
     renderVariables();
     addVariableAnimation('variable-display');
@@ -332,7 +349,7 @@ function handleConfigUpdate(config) {
             const value = config[key];
             const item = document.createElement('span');
             item.className = 'state-item';
-            item.innerHTML = `<strong>${key}:</strong> ${typeof value === 'object' ? JSON.stringify(value, null, 2).substring(0, 20) + '...' : value}`;
+            item.innerHTML = `<strong>${escapeHtml(key)}:</strong> ${escapeHtml(typeof value === 'object' ? JSON.stringify(value, null, 2).substring(0, 20) + '...' : value)}`;
             elements.configDisplay.appendChild(item);
         });
     }
@@ -431,8 +448,10 @@ function handlePlaySound(data) {
     // Create and play audio element
     const audio = document.createElement('audio');
     
-    // Handle different sound file formats
-    if (data.file && data.file.length > 10) {
+    // Automations send a full URL; legacy triggers sent a bare upload name
+    if (data.url && (data.url.startsWith('/') || /^https?:\/\//.test(data.url))) {
+        audio.src = data.url;
+    } else if (data.file && data.file.length > 10) {
         // Assume it's an audio file ID, construct the path
         audio.src = `/uploads/${data.file}`;
     } else {
@@ -496,7 +515,14 @@ function handleLayoutUpdated(data) {
 }
 
 // Apply layout configuration to player interface
+// Themes define their own layout. The old grid layout system only runs when a
+// theme opts in with <body data-legacy-layout="true">.
+function legacyLayoutEnabled() {
+    return !!(document.body && document.body.dataset.legacyLayout === "true");
+}
+
 function applyLayoutToPlayer(layoutConfig) {
+    if (!legacyLayoutEnabled()) return;
     // Skip automated layout for win95x theme (windows manage their own layout)
     if (document.body.classList.contains('theme-win95x')) {
         return;
@@ -648,7 +674,7 @@ function renderVariables() {
     Object.values(variables).forEach(variable => {
         const item = document.createElement('span');
         item.className = 'state-item';
-        item.innerHTML = `<strong>${variable.name}:</strong> ${variable.value}`;
+        item.innerHTML = `<strong>${escapeHtml(variable.name)}:</strong> ${escapeHtml(typeof variable.value === 'object' ? JSON.stringify(variable.value) : variable.value)}`;
         container.appendChild(item);
     });
 }
@@ -759,7 +785,7 @@ function renderHints() {
 
     const card = document.createElement('div');
     card.className = `hint-card ${latestHint.new ? 'new' : ''} ${lengthClass}`;
-    card.innerHTML = `<p>${latestHint.message}</p>`;
+    card.innerHTML = `<p>${escapeHtml(latestHint.message)}</p>`;
     container.appendChild(card);
 }
 
@@ -831,12 +857,12 @@ function clearHints() {
          }
  
          // Text-only display when no mediaId provided
-         if (!mediaId) {
+         if (!mediaId && !(payload && payload.url)) {
              if (elements.lightboxHeadline) elements.lightboxHeadline.textContent = '';
              const fontSize = computeAdaptiveFontSize(headline);
              elements.lightboxContent.innerHTML = `
                  <div style="display:flex;align-items:center;justify-content:center;width:90vw;height:70vh;padding:1rem;text-align:center;">
-                     <div style="white-space:pre-wrap;word-break:break-word;line-height:1.1;font-weight:700;font-size:${fontSize};">${headline || ''}</div>
+                     <div style="white-space:pre-wrap;word-break:break-word;line-height:1.1;font-weight:700;font-size:${fontSize};">${escapeHtml(headline || '')}</div>
                  </div>
              `;
  
@@ -877,8 +903,15 @@ function clearHints() {
          }
  
          // Fetch media details
-         const response = await fetch(`/api/media/${mediaId}`);
-         const res = await response.json();
+         let res;
+         if (!mediaId && payload && payload.url) {
+             // Automations can show any uploaded file by URL
+             const isVideo = /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i.test(payload.url);
+             res = { success: true, data: { url: payload.url, type: isVideo ? 'video' : 'image', title: '' } };
+         } else {
+             const response = await fetch(`/api/media/${mediaId}`);
+             res = await response.json();
+         }
  
          if (res.success && res.data) {
              const media = res.data;
@@ -886,7 +919,7 @@ function clearHints() {
              if (elements.lightboxHeadline) elements.lightboxHeadline.textContent = headline || '';
  
              if (media.type === 'image') {
-                 elements.lightboxContent.innerHTML = `<img src="${media.url}" alt="${media.title || 'Media'}">`;
+                 elements.lightboxContent.innerHTML = `<img src="${escapeHtml(media.url)}" alt="${escapeHtml(media.title || 'Media')}">`;
  
                  if (autoCloseEnabled && Number(autoCloseSeconds) > 0) {
                      autoCloseTimerId = setTimeout(() => closeLightbox(), Number(autoCloseSeconds) * 1000);
@@ -1251,7 +1284,9 @@ window.playerApp = {
   };
   
   // Rules Slideshow functionality
-  document.getElementById('start-rules-button').addEventListener('click', () => {
+  // Themes may load player.js before the hidden rules button exists
+  const startRulesButton = document.getElementById('start-rules-button');
+  if (startRulesButton) startRulesButton.addEventListener('click', () => {
     if (roomId) {
       window.open(`/room/${roomId}/rules-slideshow`, 'rules-slideshow', 'width=100%,height=100%,scrollbars=no');
     } else {
@@ -1527,7 +1562,7 @@ class PlayerLayoutManager {
     }
     
     applyLayout(layoutType) {
-        if (!this.container) return;
+        if (!this.container || !legacyLayoutEnabled()) return;
         
         // Remove all layout classes
         this.container.classList.remove('layout-default', 'layout-mobile', 'layout-compact', 'layout-custom');

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automations · Quandary Control</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23f5b942'/><text x='16' y='22' font-size='17' text-anchor='middle' fill='%23222' font-family='Arial' font-weight='bold'>A</text></svg>">
+    <link rel="stylesheet" href="/vendor/lucide/lucide.css">
+    <link rel="stylesheet" href="/css/ui.css">
+    <link rel="stylesheet" href="/css/automations.css">
+    <script src="/js/ui.js"></script>
+</head>
+<body>
+    <header class="topbar">
+        <a class="btn btn-ghost btn-icon" href="/" aria-label="Dashboard"><i class="icon-arrow-left"></i></a>
+        <nav class="crumbs"><a href="/">Rooms</a><span class="sep">/</span><strong id="room-name">…</strong><span class="sep">/</span><span>Automations</span></nav>
+        <div class="tabs page-tabs" role="tablist">
+            <button class="tab active" data-view="automations"><i class="icon-zap"></i>Automations</button>
+            <button class="tab" data-view="integrations"><i class="icon-plug"></i>Integrations</button>
+            <button class="tab" data-view="activity"><i class="icon-activity"></i>Activity <span class="badge" id="activity-count" hidden></span></button>
+        </div>
+        <div class="spacer"></div>
+        <a class="btn btn-sm" id="gm-link"><i class="icon-gamepad-2"></i>GM console</a>
+    </header>
+    <div class="room-stripe"></div>
+
+    <main id="view-automations" class="auto-layout">
+        <aside class="auto-list">
+            <div class="auto-list-head">
+                <div class="input-affix grow"><i class="icon-search"></i><input class="input input-sm" id="auto-search" placeholder="Filter…"></div>
+                <button class="btn btn-primary btn-sm" id="new-auto"><i class="icon-plus"></i>New</button>
+            </div>
+            <div id="auto-items" class="auto-items"></div>
+        </aside>
+        <section class="auto-editor" id="editor"></section>
+    </main>
+
+    <main id="view-integrations" class="content" hidden></main>
+    <main id="view-activity" class="content" hidden></main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/automation-catalog.js"></script>
+    <script src="/js/automations-app.js"></script>
+</body>
+</html>

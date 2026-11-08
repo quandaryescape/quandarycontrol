@@ -1,253 +1,183 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quandary Control - Game Master View</title>
-    <link rel="stylesheet" href="/styles.css">
+    <title>Game Master · Quandary Control</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%233ecf8e'/><text x='16' y='22' font-size='17' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>G</text></svg>">
+    <link rel="stylesheet" href="/vendor/lucide/lucide.css">
+    <link rel="stylesheet" href="/css/ui.css">
+    <link rel="stylesheet" href="/css/gm.css">
+    <script src="/js/ui.js"></script>
 </head>
-<body>
-    <div class="container">
-        <header class="header">
-            <h1 class="room-title" id="gm-page-title">Game Master Control</h1>
-            <div class="status-badges">
-                <span class="status-badge" id="connection-status">Connected</span>
+<body class="gm">
+    <header class="gm-top">
+        <a class="btn btn-ghost btn-icon" href="/" aria-label="Back to dashboard" data-tip="Dashboard"><i class="icon-arrow-left"></i></a>
+        <div class="gm-room">
+            <h1 id="room-name">Loading…</h1>
+            <button class="badge badge-accent mono" id="room-code" title="Copy player link" style="border:0;cursor:pointer"></button>
+        </div>
+        <span class="gm-conn" id="conn"><span class="dot dot-warning dot-pulse"></span><span>Connecting…</span></span>
+        <span class="badge" id="screens" title="Player screens connected to this room"><i class="icon-monitor"></i><span>0</span> screens</span>
+        <div class="spacer"></div>
+        <a class="btn btn-sm" id="open-player" target="_blank" rel="noopener"><i class="icon-monitor"></i><span class="hide-sm">Player screen</span></a>
+        <button class="btn btn-sm" id="notes-btn"><i class="icon-notebook-pen"></i><span class="hide-sm">Notes</span></button>
+        <button class="btn btn-ghost btn-icon btn-sm" id="more-btn" aria-label="More"><i class="icon-ellipsis"></i></button>
+    </header>
+    <div class="room-stripe gm-stripe"></div>
+
+    <main class="gm-grid">
+        <!-- ============================== Column 1: game control -->
+        <section class="gm-col">
+            <div class="card timer-card" id="main-timer-card">
+                <div class="timer-head">
+                    <span class="section-title" style="margin:0"><i class="icon-timer"></i>Game timer</span>
+                    <span class="badge" id="timer-status">Ready</span>
+                </div>
+                <div class="timer-big" id="timer-display">00:00</div>
+                <div class="timer-progress"><div id="timer-progress"></div></div>
+                <div class="timer-sub"><span id="timer-elapsed">0:00 elapsed</span><span id="timer-total"></span></div>
+                <div class="timer-controls">
+                    <button class="btn btn-success btn-lg timer-primary" id="timer-toggle"><i class="icon-play"></i><span>Start</span></button>
+                    <button class="btn btn-lg" id="timer-reset" data-tip="Reset to full time"><i class="icon-rotate-ccw"></i></button>
+                </div>
+                <div class="timer-adjust">
+                    <button class="btn btn-sm" data-adjust="-300">−5m</button>
+                    <button class="btn btn-sm" data-adjust="-60">−1m</button>
+                    <button class="btn btn-sm" data-adjust="60">+1m</button>
+                    <button class="btn btn-sm" data-adjust="300">+5m</button>
+                    <div class="input-group grow">
+                        <input class="input input-sm" id="custom-adjust" placeholder="+2:30 or -45s" aria-label="Custom time adjustment">
+                        <button class="btn btn-sm" id="custom-adjust-btn">Apply</button>
+                    </div>
+                </div>
             </div>
-        </header>
 
-        <main>
-            <section class="timer-section gm-control-section">
-                <h2 class="section-heading">⏳ Primary Timer Controls</h2>
-                <div class="timer-controls">
-                    <button class="nav-button" id="start-timer">Start</button>
-                    <button class="nav-button" id="pause-timer">Pause</button>
-                    <button class="nav-button" id="stop-timer">Stop</button>
-                    <button class="nav-button secondary" id="reset-timer">Reset</button>
-                    <div class="timer-separator"></div>
-                    <button class="nav-button secondary timer-adjust" id="add-time">+1m</button>
-                    <button class="nav-button secondary timer-adjust" id="subtract-time">-1m</button>
-                    <input type="number" id="custom-time" class="form-input" placeholder="Custom minutes" min="1" max="60" style="width: 100px; margin-left: 10px;">
-                    <button class="nav-button secondary timer-adjust" id="add-custom-time">+</button>
-                    <button class="nav-button secondary timer-adjust" id="subtract-custom-time">-</button>
-                    <div class="timer-display" id="timer-display">00:00</div>
+            <div class="card timer-card secondary" id="secondary-timer-card" hidden>
+                <div class="timer-head">
+                    <span class="section-title" style="margin:0"><i class="icon-hourglass"></i><span id="secondary-label">Secondary timer</span></span>
+                    <span class="badge" id="secondary-status">Ready</span>
                 </div>
-            </section>
+                <div class="row">
+                    <div class="timer-mid grow" id="secondary-display">00:00</div>
+                    <button class="btn btn-success btn-icon" id="secondary-toggle" aria-label="Start or pause"><i class="icon-play"></i></button>
+                    <button class="btn btn-icon" id="secondary-reset" aria-label="Reset"><i class="icon-rotate-ccw"></i></button>
+                </div>
+                <div class="timer-adjust">
+                    <button class="btn btn-xs" data-sadjust="-60">−1m</button>
+                    <button class="btn btn-xs" data-sadjust="60">+1m</button>
+                    <button class="btn btn-xs grow" id="start-both"><i class="icon-play"></i>Start both timers</button>
+                </div>
+            </div>
 
-            <section class="secondary-timer-section gm-control-section" id="secondary-timer-section" style="display: none;">
-                <h2 class="section-heading">⏲️ Secondary Timer Controls</h2>
-                <div class="timer-controls">
-                    <button class="nav-button" id="start-secondary-timer">Start</button>
-                    <button class="nav-button" id="pause-secondary-timer">Pause</button>
-                    <button class="nav-button" id="stop-secondary-timer">Stop</button>
-                    <div class="timer-separator"></div>
-                    <button class="nav-button secondary timer-adjust" id="add-secondary-time">+1m</button>
-                    <button class="nav-button secondary timer-adjust" id="subtract-secondary-time">-1m</button>
-                    <input type="number" id="custom-secondary-time" class="form-input" placeholder="Custom minutes" min="1" max="60" style="width: 100px; margin-left: 10px;">
-                    <button class="nav-button secondary timer-adjust" id="add-custom-secondary-time">+</button>
-                    <button class="nav-button secondary timer-adjust" id="subtract-custom-secondary-time">-</button>
-                    <div class="timer-display" id="secondary-timer-display">00:00</div>
-                </div>
-            </section>
-
-            <section class="dual-timer-section gm-control-section" id="dual-timer-section" style="display: none;">
-                <h2 class="section-heading">⏰ Dual Timer Controls</h2>
-                <div class="timer-controls">
-                    <button class="nav-button primary" id="start-both-timers">🚀 Start Both Timers</button>
-                    <button class="nav-button secondary" id="pause-both-timers">⏸️ Pause Both</button>
-                    <button class="nav-button secondary" id="stop-both-timers">⏹️ Stop Both</button>
-                </div>
-            </section>
-
-            <section class="hint-system gm-control-section" id="broadcast-section">
-                <h2 class="section-heading">💡 Real-Time Hint System</h2>
-                <div class="hint-controls">
-                    <input type="text" id="hint-input" class="form-input"
-                        placeholder="Enter strategic hint..."
-                        style="background: var(--bg-light); color: var(--text-light);">
-                    <button class="nav-button" id="send-hint">Broadcast Hint</button>
-                    <button class="nav-button secondary" id="clear-hints">Clear Hints</button>
-                </div>
-                <div id="hint-history" class="state-card">
-                    <h3>Recent Hints</h3>
-                    <div class="state-content"></div>
-                </div>
-            </section>
-
-            <section class="chat-system gm-control-section" id="chat-section">
-                <h2 class="section-heading">💬 GM ↔ Player Chat</h2>
-                <div id="chat-messages" class="state-card" style="max-height: 220px; overflow-y: auto;">
-                    <h3>Conversation</h3>
-                    <div class="state-content" id="chat-log"></div>
-                </div>
-                <div class="hint-controls">
-                    <input type="text" id="chat-input" class="form-input"
-                        placeholder="Type a message to the player..."
-                        style="background: var(--bg-light); color: var(--text-light);">
-                    <button class="nav-button" id="send-chat">Send</button>
-                    <button class="nav-button secondary" id="clear-chat">Clear Chat</button>
-                </div>
-            </section>
-            
-            <!-- Media / Lightbox Manager -->
-            <section class="media-manager gm-control-section">
-                <h2 class="section-heading">📜 Rules Configuration</h2>
-                <button class="nav-button secondary" id="edit-rules-button">
-                    Edit Rules
-                </button>
-                
-                <h2 class="section-heading" style="margin-top: 2rem;">🖼️ Media / Lightbox</h2>
-                <div class="upload-container">
-                    <input type="file" id="media-upload" accept="image/*,video/*" multiple style="display:none;">
-                    <button class="nav-button" id="trigger-upload">Choose Files</button>
-                    <button class="nav-button secondary" id="confirm-upload">Upload Selected</button>
-                </div>
-                <div id="file-list" class="file-list"></div>
-                <div id="upload-status" class="state-card" style="margin-top:.5rem;"></div>
-
-                <div class="media-display-section state-card" style="margin-top:1rem;">
-                    <h3>Uploaded Media</h3>
-                    <div id="media-gallery" class="media-gallery"></div>
-                    <div class="media-controls" style="margin-top:1rem; display:flex; gap:.75rem; flex-wrap:wrap; align-items:center;">
-                        <input type="text" id="lightbox-headline" class="form-input" placeholder="Enter headline text..." style="flex:1; min-width:240px;">
-                        <label class="checkbox-label" style="display:flex; align-items:center; gap:.25rem;">
-                            <input type="checkbox" id="autoclose-toggle" checked>
-                            <span>Autoclose</span>
-                        </label>
-                        <label style="display:flex; align-items:center; gap:.25rem;">
-                            <span>Seconds</span>
-                            <select id="autoclose-seconds">
-                                <option value="5" selected>5</option>
-                                <option value="10">10</option>
-                                <option value="15">15</option>
-                                <option value="30">30</option>
-                                <option value="0">Manual</option>
-                            </select>
-                        </label>
-                        <button class="nav-button" id="show-lightbox">Show on Player Screen</button>
+            <div class="card">
+                <div class="card-head"><i class="icon-zap" style="color:var(--warning)"></i><h3 class="grow">Quick actions</h3>
+                    <a class="btn btn-ghost btn-xs" id="edit-automations"><i class="icon-settings-2"></i>Edit</a></div>
+                <div class="card-body stack">
+                    <div class="quick-grid" id="quick-actions"></div>
+                    <div class="row">
+                        <select class="select input-sm grow" id="slideshow-select" aria-label="Slideshow"></select>
+                        <button class="btn btn-sm" id="play-slideshow"><i class="icon-presentation"></i>Play on screens</button>
+                    </div>
+                    <div class="row">
+                        <button class="btn btn-sm grow" id="close-overlays"><i class="icon-x-circle"></i>Close pop-ups</button>
+                        <button class="btn btn-sm grow" id="reload-players"><i class="icon-refresh-cw"></i>Reload screens</button>
                     </div>
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <section class="variable-monitor gm-control-section">
-                <h2 class="section-heading">📊 Game Variables</h2>
+        <!-- ============================== Column 2: communication -->
+        <section class="gm-col">
+            <div class="card composer-card">
+                <div class="card-head" style="padding-bottom:0;border:0">
+                    <div class="tabs grow" style="border:0">
+                        <button class="tab active" data-mode="hint"><i class="icon-lightbulb"></i>Hint</button>
+                        <button class="tab" data-mode="message"><i class="icon-megaphone"></i>Screen message</button>
+                    </div>
+                    <span class="badge" id="hint-count" title="Hints sent this game">0 hints</span>
+                </div>
+                <div class="card-body stack">
+                    <textarea class="textarea composer" id="composer" rows="3" placeholder="Type a hint for the players…  (Enter to send, Shift+Enter for a new line)"></textarea>
+                    <div class="row row-wrap" id="message-options" hidden>
+                        <select class="select input-sm" id="msg-style" style="width:auto">
+                            <option value="info">Info</option><option value="success">Success</option><option value="warning">Warning</option><option value="danger">Alert</option>
+                        </select>
+                        <input class="input input-sm grow" id="msg-title" placeholder="Title (optional)">
+                        <select class="select input-sm" id="msg-duration" style="width:auto">
+                            <option value="5">5s</option><option value="8" selected>8s</option><option value="15">15s</option><option value="30">30s</option><option value="0">Until closed</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <span class="faint small grow" id="composer-hint">Sends a full-screen hint to every player screen.</span>
+                        <button class="btn btn-primary" id="send-btn"><i class="icon-send"></i>Send hint</button>
+                    </div>
+                    <div id="presets"></div>
+                </div>
+            </div>
 
-                <!-- User Variables Section -->
-                <div class="variable-section">
-                    <h3 class="variable-section-title">🎮 Game Variables</h3>
-                    <div id="user-variables-display" class="state-card">
-                        <div class="state-content"></div>
+            <div class="card chat-card" id="chat-card">
+                <div class="card-head"><i class="icon-messages-square" style="color:var(--info)"></i><h3 class="grow">Chat with players</h3>
+                    <span class="badge badge-info" id="chat-unread" hidden>0 new</span>
+                    <button class="btn btn-ghost btn-xs" id="clear-chat"><i class="icon-eraser"></i>Clear</button></div>
+                <div class="chat-log" id="chat-log">
+                    <div class="chat-empty faint small">Messages from players appear here.</div>
+                </div>
+                <div class="chat-typing faint small" id="chat-typing" hidden>Players are typing…</div>
+                <div class="chat-input">
+                    <input class="input" id="chat-input" placeholder="Reply to players…" maxlength="1000">
+                    <button class="btn btn-primary btn-icon" id="chat-send" aria-label="Send"><i class="icon-send"></i></button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head"><i class="icon-history" style="color:var(--text-muted)"></i><h3 class="grow">Sent this game</h3>
+                    <button class="btn btn-ghost btn-xs" id="clear-hints"><i class="icon-eraser"></i>Clear from screens</button></div>
+                <div class="hint-history" id="hint-history"><div class="faint small" style="padding:12px 16px">Nothing sent yet.</div></div>
+            </div>
+        </section>
+
+        <!-- ============================== Column 3: state, media, activity -->
+        <section class="gm-col">
+            <div class="card">
+                <div class="card-head"><i class="icon-variable" style="color:var(--accent)"></i><h3 class="grow">Game state</h3>
+                    <button class="btn btn-ghost btn-xs" id="add-var"><i class="icon-plus"></i>Add</button></div>
+                <div class="var-list" id="var-list"><div class="faint small" style="padding:12px 16px">No variables yet.</div></div>
+                <details class="builtin-vars"><summary class="faint small">Built-in timer values</summary><div id="timer-vars" class="var-list"></div></details>
+            </div>
+
+            <div class="card">
+                <div class="card-head"><i class="icon-image" style="color:var(--success)"></i><h3 class="grow">Show media</h3>
+                    <button class="btn btn-ghost btn-xs" id="upload-media"><i class="icon-upload"></i>Upload</button></div>
+                <div class="card-body stack">
+                    <div class="media-grid" id="media-grid"></div>
+                    <input class="input input-sm" id="media-headline" placeholder="Headline (optional – or send text on its own)">
+                    <div class="row">
+                        <select class="select input-sm" id="media-close" style="width:auto" aria-label="Auto close">
+                            <option value="5">Close after 5s</option><option value="10" selected>Close after 10s</option><option value="30">Close after 30s</option><option value="0">Stay until closed</option>
+                        </select>
+                        <div class="spacer"></div>
+                        <button class="btn btn-primary btn-sm" id="show-media"><i class="icon-cast"></i>Show on screens</button>
                     </div>
                 </div>
+            </div>
 
-                <!-- Timer Variables Section (Collapsible) -->
-                <div class="variable-section">
-                    <h3 class="variable-section-title collapsible" id="timer-variables-toggle">
-                        ⏱️ Timer Variables
-                        <span class="toggle-arrow">▼</span>
-                    </h3>
-                    <div id="timer-variables-display" class="state-card collapsible-content" style="display: none;">
-                        <div class="state-content"></div>
-                    </div>
-                </div>
-            </section>
+            <div class="card">
+                <div class="card-head"><i class="icon-activity" style="color:var(--text-muted)"></i><h3 class="grow">Activity</h3></div>
+                <div class="activity" id="activity"><div class="faint small" style="padding:12px 16px">Automation runs and game events show up here.</div></div>
+            </div>
+        </section>
+    </main>
 
-            <!-- Notification Audio Management -->
-            <section class="notification-manager gm-control-section">
-                <h2 class="section-heading">🔊 Notification Audio Settings</h2>
-                
-                <!-- Audio Upload Section -->
-                <div class="audio-upload-section state-card">
-                    <h3>Upload Audio Files</h3>
-                    <div class="upload-container">
-                        <input type="file" id="audio-upload" accept="audio/*" multiple style="display:none;">
-                        <button class="nav-button" id="trigger-audio-upload">Choose Audio Files</button>
-                        <button class="nav-button secondary" id="confirm-audio-upload">Upload Selected</button>
-                    </div>
-                    <div id="audio-file-list" class="file-list"></div>
-                    <div id="audio-upload-status" class="state-card" style="margin-top:.5rem;"></div>
-                </div>
-
-                <!-- Notification Settings -->
-                <div class="notification-settings-section state-card" style="margin-top:1rem;">
-                    <h3>Notification Settings</h3>
-                    <div id="notification-settings" class="notification-settings-grid">
-                        <!-- Settings will be populated by JavaScript -->
-                    </div>
-                    <div class="notification-actions" style="margin-top:1rem; display:flex; gap:.75rem; flex-wrap:wrap;">
-                        <button class="nav-button" id="save-notification-settings">Save Settings</button>
-                        <button class="nav-button secondary" id="test-all-notifications">Test All</button>
-                        <button class="nav-button secondary" id="reload-notification-settings">Reload</button>
-                    </div>
-                </div>
-
-                <!-- Available Audio Files -->
-                <div class="audio-library-section state-card" style="margin-top:1rem;">
-                    <h3>Audio Library</h3>
-                    <div id="audio-library" class="audio-library-grid">
-                        <!-- Audio files will be populated by JavaScript -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- GM Page Customization -->
-            <section class="gm-customization gm-control-section">
-                <h2 class="section-heading">🎨 GM Page Customization</h2>
-                <div class="customization-controls">
-                    <div class="customization-group">
-                        <label for="gm-bg-color">Background Color:</label>
-                        <input type="color" id="gm-bg-color" class="color-input" value="#1a1a1a">
-                        <button class="nav-button secondary" id="reset-bg-color">Reset</button>
-                    </div>
-                    
-                    <div class="customization-group">
-                        <label for="gm-bg-image">Background Image:</label>
-                        <input type="file" id="gm-bg-image" accept="image/*" style="display: none;">
-                        <button class="nav-button secondary" id="choose-bg-image">Choose Image</button>
-                        <button class="nav-button secondary" id="remove-bg-image">Remove Image</button>
-                    </div>
-                    
-                    <div class="customization-group">
-                        <label for="gm-primary-color">Primary Button Color:</label>
-                        <input type="color" id="gm-primary-color" class="color-input" value="#007bff">
-                        <button class="nav-button secondary" id="reset-primary-color">Reset</button>
-                    </div>
-
-                    <div class="customization-group">
-                        <label for="gm-secondary-color">Secondary Button Color:</label>
-                        <input type="color" id="gm-secondary-color" class="color-input" value="#6c757d">
-                        <button class="nav-button secondary" id="reset-secondary-color">Reset</button>
-                    </div>
-                    
-                    <div class="customization-group">
-                        <label for="gm-title-color">Room Title Color:</label>
-                        <input type="color" id="gm-title-color" class="color-input" value="#ffffff">
-                        <button class="nav-button secondary" id="reset-title-color">Reset</button>
-                    </div>
-
-                    <div class="customization-group">
-                        <label for="gm-text-color">General Text Color:</label>
-                        <input type="color" id="gm-text-color" class="color-input" value="#ffffff">
-                        <button class="nav-button secondary" id="reset-text-color">Reset</button>
-                    </div>
-                    
-                    <div class="customization-actions">
-                        <button class="nav-button" id="save-gm-customization">Save Customization</button>
-                        <button class="nav-button secondary" id="reset-all-customization">Reset All</button>
-                    </div>
-                </div>
-            </section>
-        </main>
-
-        <nav class="nav-section">
-            <button class="nav-button secondary" onclick="window.location.href='/admin.html'">
-                ← Return to Dashboard
-            </button>
-        </nav>
-    </div>
+    <aside class="notes-panel" id="notes-panel" hidden>
+        <div class="drawer-head"><i class="icon-notebook-pen"></i><h2>GM notes</h2>
+            <a class="btn btn-ghost btn-xs" id="edit-notes"><i class="icon-pencil"></i>Edit</a>
+            <button class="btn btn-ghost btn-icon btn-sm" id="close-notes" aria-label="Close"><i class="icon-x"></i></button></div>
+        <div class="drawer-body"><pre class="notes-text" id="notes-text"></pre></div>
+    </aside>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/notification-manager.js"></script>
-    <script src="/gm-notifications.js"></script>
-    <script src="/gm.js"></script>
+    <script src="/js/gm-app.js"></script>
 </body>
 </html>

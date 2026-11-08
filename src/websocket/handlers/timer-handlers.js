@@ -97,6 +97,10 @@ function setupTimerHandlers(socket, io, timerService) {
         result = timerService.adjustTimer(roomId, amount, 'secondary', io);
         break;
 
+      case 'reset':
+        result = timerService.resetTimer(roomId, amount, 'secondary', io);
+        break;
+
       default:
         roomLogger.warn('Unknown secondary timer action', { roomId, action, socketId: socket.id });
         return socket.emit('error', 'Unknown secondary timer action');

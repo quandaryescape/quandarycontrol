@@ -12,7 +12,7 @@ function requestLogging(req, res, next) {
     return next();
   }
 
-  logger.info(`${req.method} ${req.originalUrl} - Started`, {
+  logger.debug(`${req.method} ${req.originalUrl} - Started`, {
     ip: req.ip,
     userAgent: req.get('User-Agent')?.substring(0, 100), // Truncate long user agents
     referer: req.get('Referer')

@@ -1,5 +1,15 @@
 const fs = require('fs');
 const path = require('path');
+const themeService = require('../src/services/theme-service');
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 class ShortcodeParser {
     constructor() {
@@ -188,15 +198,15 @@ class ShortcodeParser {
             switch (field) {
                 case 'name':
                 case 'title':
-                    return roomData.name || '';
+                    return escapeHtml(roomData.name || '');
                 case 'code':
                 case 'shortcode':
-                    return roomData.shortcode || '';
+                    return escapeHtml(roomData.shortcode || '');
                 case 'pid':
                 case 'id':
-                    return roomData.id || '';
+                    return escapeHtml(roomData.id || '');
                 default:
-                    return roomData[field] || '';
+                    return escapeHtml(typeof roomData[field] === 'object' ? '' : (roomData[field] || ''));
             }
         }
         
@@ -205,9 +215,9 @@ class ShortcodeParser {
         
         return `
             <div class="room-info-component">
-                <h1 id="room-title" class="room-title">${roomData.name || 'Loading...'}</h1>
+                <h1 id="room-title" class="room-title">${escapeHtml(roomData.name || 'Loading...')}</h1>
                 <div id="room-info" class="room-info">
-                    ${roomData.shortcode ? `Room Code: ${roomData.shortcode}` : ''}
+                    ${roomData.shortcode ? `Room Code: ${escapeHtml(roomData.shortcode)}` : ''}
                 </div>
                 ${showProgress ? '<div id="room-progress" class="room-progress"></div>' : ''}
             </div>
@@ -330,80 +340,132 @@ class ShortcodeParser {
     }
 
     /**
-     * Load and parse theme file
-     * @param {string} themeName - Name of the theme
+     * Load and parse a saved theme
+     * @param {string} themeName - Theme folder name (validated)
      * @param {object} roomData - Room data for component rendering
      * @returns {string} - Parsed HTML content
      */
     loadTheme(themeName, roomData = {}) {
-        const themePath = path.join(__dirname, '..', 'themes', themeName, 'index.html');
-        
         try {
-            let themeContent = fs.readFileSync(themePath, 'utf8');
-            
-            // Normalize theme stylesheet path (handles style.css and ./style.css)
-            themeContent = themeContent.replace(
-                /href=["']\.?\/?style\.css["']/g,
-                `href="/themes/${themeName}/style.css"`
-            );
-            
-            // Ensure base application stylesheet is present BEFORE theme stylesheet
-            const themeStyleTag = new RegExp(`<link\\s+rel=["']stylesheet["']\\s+href=["']/themes/${themeName}/style\\.css["'][^>]*>`);
-            if (!themeContent.includes('/styles.css')) {
-                if (themeStyleTag.test(themeContent)) {
-                    themeContent = themeContent.replace(
-                        themeStyleTag,
-                        `<link rel="stylesheet" href="/styles.css">\n    <link rel="stylesheet" href="/themes/${themeName}/style.css">`
-                    );
-                } else {
-                    // Fallback: inject before </head>
-                    themeContent = themeContent.replace(
-                        /<\/head>/i,
-                        `    <link rel="stylesheet" href="/styles.css">\n</head>`
-                    );
-                }
-            }
-
-            // Normalize theme script path (handles script.js and ./script.js)
-            themeContent = themeContent.replace(
-                /src=["']\.?\/?script\.js["']/g,
-                `src="/themes/${themeName}/script.js"`
-            );
-
-            // Ensure required core scripts and minimal system elements are present
-            const needsSocket = !themeContent.includes('/socket.io/socket.io.js');
-            const needsPlayer = !themeContent.includes('/player.js');
-            const hasNotifications = themeContent.includes('[notifications');
-            const needsNotificationScripts = hasNotifications && (!themeContent.includes('/notification-manager.js') || !themeContent.includes('/theme-component-interface.js'));
-            const needsStartBtn = !themeContent.includes('id="start-rules-button"');
-
-            if (needsSocket || needsPlayer || needsNotificationScripts || needsStartBtn) {
-                const injections = [];
-                if (needsSocket) injections.push(`    <script src="/socket.io/socket.io.js"></script>`);
-                if (needsNotificationScripts) {
-                    injections.push(`    <script src="/notification-manager.js"></script>`);
-                    injections.push(`    <script src="/theme-component-interface.js"></script>`);
-                }
-                if (needsPlayer) injections.push(`    <script src="/player.js"></script>`);
-                if (needsStartBtn) {
-                    injections.push(`    <div style="display: none;">`);
-                    injections.push(`        <button id="start-rules-button"></button>`);
-                    injections.push(`        <div id="system-elements"></div>`);
-                    injections.push(`    </div>`);
-                }
-
-                // Inject just before </body>
-                themeContent = themeContent.replace(
-                    /<\/body>/i,
-                    `${injections.join('\n')}\n</body>`
-                );
-            }
-            
-            return this.parse(themeContent, roomData);
+            if (!themeService.isValidSlug(themeName)) throw new Error('Invalid theme name');
+            const themePath = path.join(themeService.themeDir(themeName), 'index.html');
+            const themeContent = fs.readFileSync(themePath, 'utf8');
+            return this.prepare(themeContent, themeName, roomData);
         } catch (error) {
-            console.error(`Error loading theme ${themeName}:`, error);
-            return this.getDefaultPlayerHTML(roomData);
+            console.error(`Error loading theme ${themeName}:`, error.message);
+            return this.prepare(this.getDefaultPlayerHTML(roomData), 'boilerplate', roomData);
         }
+    }
+
+    /**
+     * Render an unsaved draft (theme builder live preview). CSS/JS are inlined
+     * so edits show without writing files.
+     */
+    renderDraft({ slug, html = '', css = '', js = '' }, roomData = {}, { injectHead = '', injectBody = '' } = {}) {
+        const safeSlug = themeService.isValidSlug(slug) ? slug : '__draft__';
+        let content = String(html || '');
+        const styleTag = `<style id="qb-theme-css">\n${String(css || '').replace(/<\/style/gi, '<\\/style')}\n</style>`;
+        const linkRx = new RegExp(`<link[^>]+href=["'](?:\\.?\\/?|/themes/${safeSlug}/)style\\.css["'][^>]*>`, 'i');
+        if (linkRx.test(content)) {
+            content = content.replace(linkRx, () => styleTag);
+        } else if (/<\/head>/i.test(content)) {
+            content = content.replace(/<\/head>/i, () => `${styleTag}\n</head>`);
+        } else {
+            content = styleTag + content;
+        }
+        // Drop the saved script.js reference; the draft JS is inlined instead
+        content = content.replace(new RegExp(`<script[^>]+src=["'](?:\\.?\\/?|/themes/${safeSlug}/)script\\.js["'][^>]*>\\s*</script>`, 'gi'), '');
+        const draftScript = js && js.trim() ? `<script id="qb-theme-js">\n${js.replace(/<\/script/gi, '<\\/script')}\n</script>` : '';
+
+        content = this.prepare(content, safeSlug, roomData);
+
+        const tail = `${draftScript}\n${injectBody}\n`;
+        content = /<\/body>/i.test(content)
+            ? content.replace(/<\/body>(?![\s\S]*<\/body>)/i, () => `${tail}</body>`)
+            : content + tail;
+        if (injectHead) {
+            content = /<\/head>/i.test(content)
+                ? content.replace(/<\/head>/i, () => `${injectHead}\n</head>`)
+                : injectHead + content;
+        }
+        return content;
+    }
+
+    /**
+     * Normalize asset paths, guarantee core scripts, then expand shortcodes.
+     */
+    prepare(themeContent, themeName, roomData = {}) {
+        // Normalize theme stylesheet path (handles style.css and ./style.css)
+        themeContent = themeContent.replace(
+            /href=["']\.?\/?style\.css["']/g,
+            `href="/themes/${themeName}/style.css"`
+        );
+        // Relative asset references (assets/foo.png) resolve against the theme folder
+        themeContent = themeContent.replace(
+            /(src|href)=(["'])\.?\/?assets\//g,
+            `$1=$2/themes/${themeName}/assets/`
+        );
+
+        // Ensure base application stylesheet is present BEFORE theme stylesheet
+        if (!themeContent.includes('/styles.css')) {
+            const themeStyleTag = new RegExp(`<link\\s+rel=["']stylesheet["']\\s+href=["']/themes/${themeName}/style\\.css["'][^>]*>`);
+            if (themeStyleTag.test(themeContent)) {
+                themeContent = themeContent.replace(
+                    themeStyleTag,
+                    `<link rel="stylesheet" href="/styles.css">\n    <link rel="stylesheet" href="/themes/${themeName}/style.css">`
+                );
+            } else if (themeContent.includes('<style id="qb-theme-css">')) {
+                themeContent = themeContent.replace('<style id="qb-theme-css">', '<link rel="stylesheet" href="/styles.css">\n<style id="qb-theme-css">');
+            } else {
+                themeContent = themeContent.replace(/<\/head>/i, `    <link rel="stylesheet" href="/styles.css">\n</head>`);
+            }
+        }
+
+        // Normalize theme script path (handles script.js and ./script.js)
+        themeContent = themeContent.replace(
+            /src=["']\.?\/?script\.js["']/g,
+            `src="/themes/${themeName}/script.js"`
+        );
+
+        const needsSocket = !themeContent.includes('/socket.io/socket.io.js');
+        const needsPlayer = !themeContent.includes('/player.js');
+        const hasNotifications = themeContent.includes('[notifications');
+        const needsNotificationScripts = hasNotifications && (!themeContent.includes('/notification-manager.js') || !themeContent.includes('/theme-component-interface.js'));
+        const needsNotificationManager = !themeContent.includes('/notification-manager.js');
+        const needsStartBtn = !themeContent.includes('id="start-rules-button"');
+
+        const injections = [];
+        if (needsSocket) injections.push(`    <script src="/socket.io/socket.io.js"></script>`);
+        // Add each script only if the theme doesn't already load it (double loading
+        // redeclares classes and breaks the page)
+        if (needsNotificationManager) {
+            injections.push(`    <script src="/notification-manager.js"></script>`);
+        }
+        if (needsNotificationScripts && !themeContent.includes('/theme-component-interface.js')) {
+            injections.push(`    <script src="/theme-component-interface.js"></script>`);
+        }
+        if (needsStartBtn) {
+            injections.push(`    <div style="display: none;">`);
+            injections.push(`        <button id="start-rules-button"></button>`);
+            injections.push(`        <div id="system-elements"></div>`);
+            injections.push(`    </div>`);
+        }
+        if (needsPlayer) injections.push(`    <script src="/player.js"></script>`);
+        // Shared overlays (styled messages, slideshow launch, reload) used by every theme
+        if (!themeContent.includes('/js/player-overlays.js')) {
+            injections.push(`    <script src="/js/player-overlays.js"></script>`);
+        }
+
+        if (injections.length) {
+            const block = injections.join('\n');
+            if (/<\/body>/i.test(themeContent)) {
+                themeContent = themeContent.replace(/<\/body>(?![\s\S]*<\/body>)/i, () => `${block}\n</body>`);
+            } else {
+                themeContent += block;
+            }
+        }
+
+        return this.parse(themeContent, roomData);
     }
 
     /**

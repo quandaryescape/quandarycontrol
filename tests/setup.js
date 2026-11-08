@@ -1,4 +1,5 @@
 // Global test setup
+process.env.LOG_LEVEL = process.env.LOG_LEVEL || 'error';
 const { closeDatabase } = require('../db/database');
 
 // Set test environment

@@ -1,0 +1,105 @@
+/* Slide rendering – shared by the slideshow player and the slideshow studio.
+   Sizes use container units so a slide looks identical as a thumbnail,
+   in the editor preview, and fullscreen on a TV. */
+@import url("/css/fonts.css");
+
+.ss-frame {
+  position: relative;
+  container-type: size;
+  overflow: hidden;
+  background: var(--ss-bg, #000);
+  color: var(--ss-text, #fff);
+  font-family: var(--ss-font, "Inter Variable", system-ui, sans-serif);
+}
+.ss-frame.ratio { aspect-ratio: 16 / 9; width: 100%; height: auto; }
+
+.ss-slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--slide-bg, var(--ss-bg, #000));
+  color: var(--slide-text, var(--ss-text, #fff));
+}
+
+/* media slides */
+.ss-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; }
+.ss-media.cover { object-fit: cover; }
+.ss-caption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 4vh 6vw 5vh; padding: 4cqh 6cqw 5cqh;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .78) 40%);
+  text-align: center;
+}
+.ss-caption.top { top: 0; bottom: auto; background: linear-gradient(rgba(0, 0, 0, .78) 60%, transparent); }
+.ss-caption .ss-title { font-size: 5.2vw; font-size: 5.2cqw; }
+.ss-caption .ss-body { font-size: 2.6vw; font-size: 2.6cqw; }
+
+/* backgrounds for text slides */
+.ss-bgimg { position: absolute; inset: 0; background-size: cover; background-position: center; }
+.ss-overlay { position: absolute; inset: 0; background: #000; }
+
+/* text slides */
+.ss-text {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2.4vh; gap: 2.4cqh;
+  padding: 8vh 9vw; padding: 8cqh 9cqw;
+  text-align: center;
+  align-items: center;
+}
+.ss-text.layout-top { justify-content: flex-start; padding-top: 11vh; padding-top: 11cqh; }
+.ss-text.align-left { text-align: left; align-items: flex-start; }
+.ss-text.layout-left { text-align: left; align-items: flex-start; justify-content: center; padding-left: 10vw; padding-left: 10cqw; padding-right: 30vw; padding-right: 30cqw; }
+
+.ss-icon { font-size: 11vw; font-size: 11cqw; line-height: 1; margin-bottom: 1vh; margin-bottom: 1cqh; }
+.ss-title {
+  margin: 0;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--slide-title, inherit);
+  text-wrap: balance;
+}
+.ss-body {
+  margin: 0;
+  line-height: 1.35;
+  opacity: .92;
+  white-space: pre-wrap;
+  text-wrap: pretty;
+  max-width: 80vw; max-width: 80cqw;
+}
+.ss-body ul { margin: 0; padding-left: 1.2em; text-align: left; white-space: normal; }
+.ss-body li { margin: 0.25em 0; }
+.ss-body li::marker { color: var(--ss-accent, #f5b942); }
+.ss-body strong { color: var(--ss-accent, #f5b942); font-weight: 750; }
+.ss-accent-bar { width: 9vw; width: 9cqw; height: 0.9vh; height: 0.9cqh; border-radius: 1vh; border-radius: 1cqh; background: var(--ss-accent, #f5b942); }
+
+.size-s .ss-title { font-size: 4.2vw; font-size: 4.2cqw; }
+.size-m .ss-title { font-size: 6vw; font-size: 6cqw; }
+.size-l .ss-title { font-size: 8vw; font-size: 8cqw; }
+.size-xl .ss-title { font-size: 11vw; font-size: 11cqw; }
+.bsize-s .ss-body { font-size: 2.2vw; font-size: 2.2cqw; }
+.bsize-m .ss-body { font-size: 3vw; font-size: 3cqw; }
+.bsize-l .ss-body { font-size: 3.9vw; font-size: 3.9cqw; }
+.bsize-xl .ss-body { font-size: 5vw; font-size: 5cqw; }
+
+.ss-empty { margin: auto; text-align: center; opacity: .5; font-size: 3vw; font-size: 3cqw; }
+
+/* transitions (player) */
+.ss-stage .ss-slide { opacity: 0; visibility: hidden; transition: opacity .6s ease, transform .6s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .6s; }
+.ss-stage .ss-slide.active { opacity: 1; visibility: visible; transition: opacity .6s ease, transform .6s cubic-bezier(.2, .8, .2, 1), visibility 0s; }
+.ss-stage.t-none .ss-slide { transition: none; }
+.ss-stage.t-slide .ss-slide { transform: translateX(6%); }
+.ss-stage.t-slide .ss-slide.leaving { transform: translateX(-6%); }
+.ss-stage.t-slide .ss-slide.active { transform: none; }
+.ss-stage.t-zoom .ss-slide { transform: scale(1.06); }
+.ss-stage.t-zoom .ss-slide.active { transform: none; }
+.ss-stage.t-zoom .ss-slide.active .ss-bgimg, .ss-stage.t-zoom .ss-slide.active img.ss-media.cover { animation: kenburns 14s ease-out forwards; }
+@keyframes kenburns { from { transform: scale(1.12); } to { transform: scale(1); } }
+.tv-mode .ss-stage .ss-slide { transition-duration: .25s; }
+.tv-mode .ss-stage.t-zoom .ss-slide.active .ss-bgimg { animation: none; }

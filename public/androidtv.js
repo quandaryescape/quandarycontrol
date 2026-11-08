@@ -278,9 +278,12 @@ class AndroidTVPortal {
         if (action === 'rules') {
             // Check if rules exist for this room
             try {
-                const response = await fetch(`/api/rooms/${roomId}/rules`);
-                const data = await response.json();
-                
+                // New slideshows first, then media from the original rules editor
+                const shows = await fetch(`/api/v2/rooms/${roomId}/slideshows`).then(r => r.json()).catch(() => null);
+                const hasShows = shows && shows.success && shows.data.some(s => s.slideCount > 0);
+                const response = hasShows ? null : await fetch(`/api/rooms/${roomId}/rules`);
+                const data = hasShows ? { success: true, data: [1] } : await response.json();
+
                 if (data.success && data.data && data.data.length > 0) {
                     // Rules exist, navigate to rules slideshow
                     window.location.href = `/room/${roomId}/rules-slideshow`;

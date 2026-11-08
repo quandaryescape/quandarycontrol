@@ -1,0 +1,43 @@
+/* Locally bundled fonts (no internet needed). Latin subsets only. */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/vendor/fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("/vendor/fontsource/oswald/files/oswald-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Orbitron";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("/vendor/fontsource/orbitron/files/orbitron-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bebas Neue";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/vendor/fontsource/bebas-neue/files/bebas-neue-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("/vendor/fontsource/rajdhani/files/rajdhani-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("/vendor/fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2") format("woff2");
+}

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theme Builder · Quandary Control</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23e96bb0'/><text x='16' y='22' font-size='17' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>T</text></svg>">
+    <link rel="stylesheet" href="/vendor/lucide/lucide.css">
+    <link rel="stylesheet" href="/vendor/codemirror/lib/codemirror.css">
+    <link rel="stylesheet" href="/vendor/codemirror/theme/material-darker.css">
+    <link rel="stylesheet" href="/css/ui.css">
+    <link rel="stylesheet" href="/css/theme-builder.css">
+    <script src="/js/ui.js"></script>
+</head>
+<body>
+    <header class="topbar tb-top">
+        <a class="btn btn-ghost btn-icon" href="/#themes" aria-label="Back to themes"><i class="icon-arrow-left"></i></a>
+        <div class="tb-title">
+            <input class="input tb-name" id="theme-name" aria-label="Theme name" maxlength="80">
+            <span class="badge" id="theme-badge" hidden><i class="icon-lock"></i>Read-only</span>
+        </div>
+
+        <div class="segmented tb-modes" id="modes">
+            <button data-mode="visual" class="active"><i class="icon-mouse-pointer-2"></i>Visual</button>
+            <button data-mode="code"><i class="icon-code"></i>Code</button>
+            <button data-mode="ai"><i class="icon-sparkles"></i>AI assistant</button>
+        </div>
+
+        <div class="spacer"></div>
+
+        <div class="row gap-4">
+            <button class="btn btn-ghost btn-icon btn-sm" id="undo" data-tip="Undo (Ctrl+Z)" disabled><i class="icon-undo-2"></i></button>
+            <button class="btn btn-ghost btn-icon btn-sm" id="redo" data-tip="Redo (Ctrl+Shift+Z)" disabled><i class="icon-redo-2"></i></button>
+        </div>
+        <span class="small muted tb-status" id="status"></span>
+        <button class="btn btn-sm" id="apply-btn"><i class="icon-door-open"></i><span class="hide-md">Use in room</span></button>
+        <button class="btn btn-primary btn-sm" id="save-btn"><i class="icon-save"></i>Save</button>
+    </header>
+
+    <div class="tb" id="tb">
+        <!-- Left panel: changes with mode -->
+        <aside class="tb-left" id="left"></aside>
+
+        <!-- Preview -->
+        <section class="tb-center">
+            <div class="preview-bar">
+                <div class="segmented" id="devices">
+                    <button data-device="tv" class="active" data-tip="TV 1920×1080"><i class="icon-tv"></i></button>
+                    <button data-device="laptop" data-tip="Laptop 1366×768"><i class="icon-laptop"></i></button>
+                    <button data-device="tablet" data-tip="Tablet 1024×768"><i class="icon-tablet"></i></button>
+                    <button data-device="phone" data-tip="Phone 390×844"><i class="icon-smartphone"></i></button>
+                </div>
+                <select class="select input-sm" id="preview-room" aria-label="Preview with room data" style="width:auto;max-width:200px"></select>
+                <label class="switch small" data-tip="Fill empty hints/chat with sample text"><input type="checkbox" id="demo-toggle" checked><span class="track"></span>Sample data</label>
+                <div class="spacer"></div>
+                <button class="btn btn-ghost btn-sm" id="reload-preview" data-tip="Reload preview"><i class="icon-refresh-cw"></i></button>
+                <a class="btn btn-ghost btn-sm" id="open-preview" target="_blank" rel="noopener" data-tip="Open preview in a new tab"><i class="icon-external-link"></i></a>
+            </div>
+            <div class="preview-stage" id="preview-stage">
+                <div class="preview-device" id="preview-device">
+                    <iframe id="preview" title="Theme preview"></iframe>
+                </div>
+                <div class="preview-loading" id="preview-loading"><div class="btn loading btn-ghost" style="width:40px"></div></div>
+            </div>
+        </section>
+
+        <!-- Right panel: inspector (visual mode) -->
+        <aside class="tb-right" id="right"></aside>
+    </div>
+
+    <script src="/vendor/codemirror/lib/codemirror.js"></script>
+    <script src="/vendor/codemirror/mode/xml/xml.js"></script>
+    <script src="/vendor/codemirror/mode/javascript/javascript.js"></script>
+    <script src="/vendor/codemirror/mode/css/css.js"></script>
+    <script src="/vendor/codemirror/mode/htmlmixed/htmlmixed.js"></script>
+    <script src="/vendor/codemirror/addon/edit/closetag.js"></script>
+    <script src="/vendor/codemirror/addon/edit/closebrackets.js"></script>
+    <script src="/vendor/codemirror/addon/edit/matchbrackets.js"></script>
+    <script src="/vendor/codemirror/addon/edit/matchtags.js"></script>
+    <script src="/vendor/codemirror/addon/fold/xml-fold.js"></script>
+    <script src="/vendor/codemirror/addon/selection/active-line.js"></script>
+    <script src="/js/theme-builder-elements.js"></script>
+    <script src="/js/theme-builder.js"></script>
+</body>
+</html>

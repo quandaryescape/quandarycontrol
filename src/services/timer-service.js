@@ -1,229 +1,234 @@
 const { logger } = require('../../utils/logger');
-const { getDatabase } = require('../../db/database');
 
+/**
+ * In-memory room timers.
+ *
+ * Timer variables (timer_main, timer_main_remaining, ...) are no longer written to
+ * SQLite every second; VariableService reads them live via getTimerState().
+ * Automations hook in through setHooks({ onTick, onStateChange }).
+ */
 class TimerService {
   constructor() {
     this.activeTimers = new Map();
     this.activeSecondaryTimers = new Map();
-    this.triggeredActions = new Map();
+    this.hooks = { onTick: null, onStateChange: null };
+  }
+
+  setHooks(hooks = {}) {
+    this.hooks = { ...this.hooks, ...hooks };
+  }
+
+  mapFor(type) {
+    return type === 'secondary' ? this.activeSecondaryTimers : this.activeTimers;
+  }
+
+  eventName(type) {
+    return type === 'secondary' ? 'secondary_timer_update' : 'timer_update';
   }
 
   /**
-   * Initialize timer for a room
+   * Initialize timer for a room (no-op if it already exists)
    */
   initializeTimer(roomId, duration, type = 'main') {
-    const timersMap = type === 'main' ? this.activeTimers : this.activeSecondaryTimers;
-
+    const timersMap = this.mapFor(type);
     if (!timersMap.has(roomId)) {
+      const d = duration > 0 ? duration : 300;
       timersMap.set(roomId, {
-        duration: duration || 300, // Default 5 minutes
-        remaining: duration || 300,
+        duration: d,
+        configuredDuration: d,
+        remaining: d,
         interval: null,
-        enabled: true
+        enabled: true,
+        status: 'ready',
+        startedAt: null
       });
-
-      logger.debug(`Timer initialized for room ${roomId}`, { type, duration });
+      logger.debug(`Timer initialized for room ${roomId}`, { type, duration: d });
     }
-
     return timersMap.get(roomId);
+  }
+
+  /**
+   * Keep an idle timer in sync after the room's configured duration changes in admin.
+   */
+  syncDuration(roomId, duration, type = 'main', io) {
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer || !(duration > 0)) return false;
+    timer.configuredDuration = duration;
+    if (!timer.interval && (timer.status === 'ready' || timer.remaining === timer.duration)) {
+      timer.duration = duration;
+      timer.remaining = duration;
+      timer.status = 'ready';
+      this.emit(roomId, type, io);
+    }
+    return true;
+  }
+
+  setEnabled(roomId, enabled, type = 'secondary', io) {
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer) return false;
+    timer.enabled = !!enabled;
+    this.emit(roomId, type, io);
+    return true;
+  }
+
+  emit(roomId, type, io) {
+    const target = io || this.io;
+    if (!target) return;
+    const state = this.getTimerState(roomId, type);
+    target.to(roomId).emit(this.eventName(type), state);
+    // Admin dashboard shows live timers on every room card
+    target.to('admin_dashboard').emit('room_timer', { roomId, type, ...state });
+  }
+
+  notifyState(roomId, type, phase) {
+    if (typeof this.hooks.onStateChange === 'function') {
+      try {
+        this.hooks.onStateChange(roomId, type, phase, this.getTimerState(roomId, type));
+      } catch (err) {
+        logger.error('Timer state hook failed', { roomId, type, phase, error: err.message });
+      }
+    }
   }
 
   /**
    * Start timer for a room
    */
   startTimer(roomId, type = 'main', io) {
-    const timersMap = type === 'main' ? this.activeTimers : this.activeSecondaryTimers;
-    const timer = timersMap.get(roomId);
-
-    if (!timer || timer.interval) {
-      return false;
+    if (io) this.io = io;
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer || timer.interval) return false;
+    if (timer.remaining <= 0) {
+      timer.remaining = timer.duration;
     }
 
-    timer.startTime = Date.now() - (timer.duration - timer.remaining) * 1000;
-    timer.interval = setInterval(async () => {
-      const elapsed = Math.floor((Date.now() - timer.startTime) / 1000);
-      timer.remaining = Math.max(timer.duration - elapsed, 0);
+    const wasFresh = timer.status === 'ready';
+    timer.status = 'running';
+    if (!timer.startedAt) timer.startedAt = new Date().toISOString();
+    // Anchor on wall clock so drift from setInterval doesn't accumulate
+    timer.endsAt = Date.now() + timer.remaining * 1000;
 
-      const eventName = type === 'main' ? 'timer_update' : 'secondary_timer_update';
-      const updateData = {
-        remaining: timer.remaining,
-        duration: timer.duration,
-        running: true
-      };
+    timer.interval = setInterval(() => this.tick(roomId, type), 1000);
+    if (typeof timer.interval.unref === 'function') timer.interval.unref();
 
-      if (type === 'secondary') {
-        updateData.enabled = timer.enabled;
-      }
-
-      io.to(roomId).emit(eventName, updateData);
-
-      // Update timer variables and check triggers
-      await this.updateTimerVariables(roomId, type, timer.remaining, timer.duration, io);
-
-      if (type === 'secondary') {
-        this.checkSecondaryTimerTriggers(roomId, timer.remaining, io);
-      }
-
-      if (timer.remaining <= 0) {
-        this.stopTimer(roomId, type, io);
-        const completeEvent = type === 'main' ? 'timer_complete' : 'secondary_timer_complete';
-        io.to(roomId).emit(completeEvent);
-
-        if (type === 'secondary') {
-          this.checkSecondaryTimerTriggers(roomId, 0, io);
-        }
-      }
-    }, 1000);
-
+    this.emit(roomId, type, io);
+    this.notifyState(roomId, type, wasFresh ? 'start' : 'resume');
     logger.info(`Timer started for room ${roomId}`, { type, remaining: timer.remaining });
     return true;
+  }
+
+  tick(roomId, type) {
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer || !timer.interval) return;
+
+    const previous = timer.remaining;
+    timer.remaining = Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000));
+    if (timer.remaining === previous && timer.remaining > 0) return;
+
+    this.emit(roomId, type);
+
+    if (typeof this.hooks.onTick === 'function') {
+      try {
+        this.hooks.onTick(roomId, type, { remaining: timer.remaining, previous, duration: timer.duration });
+      } catch (err) {
+        logger.error('Timer tick hook failed', { roomId, type, error: err.message });
+      }
+    }
+
+    if (timer.remaining <= 0) {
+      clearInterval(timer.interval);
+      timer.interval = null;
+      timer.status = 'complete';
+      this.emit(roomId, type);
+      if (this.io) this.io.to(roomId).emit(type === 'secondary' ? 'secondary_timer_complete' : 'timer_complete');
+      this.notifyState(roomId, type, 'complete');
+    }
   }
 
   /**
    * Pause timer for a room
    */
   pauseTimer(roomId, type = 'main', io) {
-    const timersMap = type === 'main' ? this.activeTimers : this.activeSecondaryTimers;
-    const timer = timersMap.get(roomId);
-
-    if (!timer || !timer.interval) {
-      return false;
-    }
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer || !timer.interval) return false;
 
     clearInterval(timer.interval);
     timer.interval = null;
+    timer.remaining = Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000));
+    timer.status = 'paused';
 
-    const eventName = type === 'main' ? 'timer_update' : 'secondary_timer_update';
-    const updateData = {
-      remaining: timer.remaining,
-      duration: timer.duration,
-      running: false
-    };
-
-    if (type === 'secondary') {
-      updateData.enabled = timer.enabled;
-    }
-
-    io.to(roomId).emit(eventName, updateData);
-
+    this.emit(roomId, type, io);
+    this.notifyState(roomId, type, 'pause');
     logger.info(`Timer paused for room ${roomId}`, { type, remaining: timer.remaining });
     return true;
   }
 
   /**
-   * Stop and reset timer for a room
+   * Stop and reset timer to its current duration
    */
   stopTimer(roomId, type = 'main', io) {
-    const timersMap = type === 'main' ? this.activeTimers : this.activeSecondaryTimers;
-    const timer = timersMap.get(roomId);
-
-    if (!timer) {
-      return false;
-    }
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer) return false;
 
     if (timer.interval) {
       clearInterval(timer.interval);
       timer.interval = null;
     }
-
     timer.remaining = timer.duration;
+    timer.status = 'ready';
+    timer.startedAt = null;
 
-    const eventName = type === 'main' ? 'timer_update' : 'secondary_timer_update';
-    const updateData = {
-      remaining: timer.remaining,
-      duration: timer.duration,
-      running: false
-    };
-
-    if (type === 'secondary') {
-      updateData.enabled = timer.enabled;
-    }
-
-    if (io) {
-      io.to(roomId).emit(eventName, updateData);
-    }
-
+    this.emit(roomId, type, io);
+    this.notifyState(roomId, type, 'stop');
     logger.info(`Timer stopped for room ${roomId}`, { type });
     return true;
   }
 
   /**
-   * Adjust timer duration
+   * Add (or remove, with a negative amount) time.
+   * Running and paused timers keep their progress; only remaining time moves.
    */
   adjustTimer(roomId, amount, type = 'main', io) {
-    const timersMap = type === 'main' ? this.activeTimers : this.activeSecondaryTimers;
-    const timer = timersMap.get(roomId);
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer || typeof amount !== 'number' || Number.isNaN(amount)) return false;
 
-    if (!timer) {
-      return false;
-    }
-
-    const newDuration = timer.duration + amount;
-    if (newDuration <= 0) {
-      return false;
-    }
-
+    const newDuration = Math.max(1, timer.duration + amount);
+    const delta = newDuration - timer.duration;
     timer.duration = newDuration;
-    if (!timer.interval) {
-      timer.remaining = timer.duration;
+
+    if (timer.interval) {
+      timer.endsAt += delta * 1000;
+      timer.remaining = Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000));
+    } else {
+      timer.remaining = Math.max(0, Math.min(timer.duration, timer.remaining + delta));
     }
 
-    const eventName = type === 'main' ? 'timer_update' : 'secondary_timer_update';
-    const updateData = {
-      remaining: timer.remaining,
-      duration: timer.duration,
-      running: !!timer.interval
-    };
-
-    if (type === 'secondary') {
-      updateData.enabled = timer.enabled;
-    }
-
-    io.to(roomId).emit(eventName, updateData);
-
+    this.emit(roomId, type, io);
+    this.notifyState(roomId, type, 'adjust');
     logger.info(`Timer adjusted for room ${roomId}`, { type, amount, newDuration });
     return true;
   }
 
   /**
-   * Reset timer with new duration
+   * Reset timer to its configured duration (or a new one)
    */
   resetTimer(roomId, newDuration, type = 'main', io) {
-    const timersMap = type === 'main' ? this.activeTimers : this.activeSecondaryTimers;
-    const timer = timersMap.get(roomId);
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer) return false;
 
-    if (!timer) {
-      return false;
-    }
-
-    // Stop the timer if running
     if (timer.interval) {
       clearInterval(timer.interval);
       timer.interval = null;
     }
 
-    // Reset to the specified duration
-    if (newDuration && newDuration > 0) {
-      timer.duration = newDuration;
-      timer.remaining = newDuration;
-    } else {
-      timer.remaining = timer.duration;
-    }
+    const d = newDuration && newDuration > 0 ? newDuration : (timer.configuredDuration || timer.duration);
+    timer.duration = d;
+    timer.remaining = d;
+    timer.status = 'ready';
+    timer.startedAt = null;
 
-    const eventName = type === 'main' ? 'timer_update' : 'secondary_timer_update';
-    const updateData = {
-      remaining: timer.remaining,
-      duration: timer.duration,
-      running: false
-    };
-
-    if (type === 'secondary') {
-      updateData.enabled = timer.enabled;
-    }
-
-    io.to(roomId).emit(eventName, updateData);
-
-    logger.info(`Timer reset for room ${roomId}`, { type, newDuration });
+    this.emit(roomId, type, io);
+    this.notifyState(roomId, type, 'reset');
+    logger.info(`Timer reset for room ${roomId}`, { type, newDuration: d });
     return true;
   }
 
@@ -231,186 +236,36 @@ class TimerService {
    * Get timer state
    */
   getTimerState(roomId, type = 'main') {
-    const timersMap = type === 'main' ? this.activeTimers : this.activeSecondaryTimers;
-    const timer = timersMap.get(roomId);
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer) return null;
 
-    if (!timer) {
-      return null;
-    }
+    const remaining = timer.interval
+      ? Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000))
+      : timer.remaining;
 
     const state = {
-      remaining: timer.remaining,
+      remaining,
       duration: timer.duration,
-      running: !!timer.interval
+      running: !!timer.interval,
+      status: timer.status,
+      startedAt: timer.startedAt
     };
-
-    if (type === 'secondary') {
-      state.enabled = timer.enabled;
-    }
-
+    if (type === 'secondary') state.enabled = timer.enabled;
     return state;
   }
 
-  /**
-   * Update timer variables in database and check triggers
-   */
-  async updateTimerVariables(roomId, timerType, remaining, duration, io) {
-    try {
-      const db = getDatabase();
-      const room = db.prepare('SELECT api_variables FROM rooms WHERE id = ?').get(roomId);
-      if (!room) return;
-
-      let apiVariables = {};
-      try {
-        apiVariables = JSON.parse(room.api_variables || '{}');
-      } catch (e) {
-        logger.error('Error parsing api_variables', { roomId, error: e.message });
-        return;
-      }
-
-      // Update timer variables
-      const timerVariableName = timerType === 'main' ? 'timer_main' : 'timer_secondary';
-      const remainingVariableName = timerType === 'main' ? 'timer_main_remaining' : 'timer_secondary_remaining';
-
-      const elapsed = duration - remaining;
-
-      apiVariables[timerVariableName] = { type: 'number', value: elapsed, system: true };
-      apiVariables[remainingVariableName] = { type: 'number', value: remaining, system: true };
-
-      // Save updated variables to database
-      const updateStmt = db.prepare('UPDATE rooms SET api_variables = ? WHERE id = ?');
-      updateStmt.run(JSON.stringify(apiVariables), roomId);
-
-      // Check for triggers on the timer variables
-      const { checkAndExecuteTriggers } = require('../../routes/api');
-      await checkAndExecuteTriggers(roomId, timerVariableName, elapsed, io);
-      await checkAndExecuteTriggers(roomId, remainingVariableName, remaining, io);
-
-    } catch (error) {
-      logger.error('Error updating timer variables', { roomId, timerType, error: error.message });
-    }
-  }
-
-  /**
-   * Check secondary timer triggers
-   */
-  checkSecondaryTimerTriggers(roomId, remainingSeconds, io) {
-    try {
-      const db = getDatabase();
-      const room = db.prepare('SELECT config FROM rooms WHERE id = ?').get(roomId);
-
-      if (!room) return;
-
-      let config = {};
-      try {
-        config = JSON.parse(room.config || '{}');
-      } catch (error) {
-        logger.warn('Failed to parse room config for triggers', { roomId, error: error.message });
-        return;
-      }
-
-      if (config.secondaryTimerTriggers && Array.isArray(config.secondaryTimerTriggers)) {
-        const roomTriggers = this.triggeredActions.get(roomId) || new Set();
-
-        config.secondaryTimerTriggers.forEach(trigger => {
-          if (trigger.timeSeconds === remainingSeconds) {
-            const triggerKey = `${roomId}_${trigger.timeSeconds}_${trigger.action}`;
-
-            if (!roomTriggers.has(triggerKey)) {
-              roomTriggers.add(triggerKey);
-              this.triggeredActions.set(roomId, roomTriggers);
-
-              logger.info(`Triggering secondary timer action for room ${roomId}`, {
-                remainingSeconds,
-                trigger
-              });
-
-              this.executeTimerTriggerAction(roomId, trigger, remainingSeconds, io);
-            }
-          }
-        });
-      }
-    } catch (error) {
-      logger.error('Error checking secondary timer triggers', { roomId, error: error.message });
-    }
-  }
-
-  /**
-   * Execute timer trigger actions
-   */
-  executeTimerTriggerAction(roomId, trigger, remainingSeconds, io) {
-    try {
-      switch (trigger.action) {
-        case 'show_media':
-          if (trigger.mediaId || trigger.headline) {
-            io.to(roomId).emit('show_lightbox', {
-              mediaId: trigger.mediaId || null,
-              headline: trigger.headline || `Timer trigger at ${remainingSeconds}s`,
-              autoCloseEnabled: trigger.autoClose !== false,
-              autoCloseSeconds: trigger.autoCloseSeconds || 5
-            });
-          }
-          break;
-
-        case 'update_variable':
-          if (trigger.variableName && trigger.variableValue !== undefined) {
-            io.to(roomId).emit('variableUpdate', {
-              name: trigger.variableName,
-              value: trigger.variableValue,
-              type: typeof trigger.variableValue,
-              source: 'secondary_timer'
-            });
-          }
-          break;
-
-        case 'send_hint':
-          if (trigger.message) {
-            io.to(roomId).emit('hintReceived', {
-              message: trigger.message,
-              timestamp: new Date().toISOString(),
-              source: 'secondary_timer'
-            });
-          }
-          break;
-
-        case 'play_sound':
-          if (trigger.soundId) {
-            io.to(roomId).emit('play_sound', {
-              soundId: trigger.soundId,
-              volume: trigger.volume || 1.0
-            });
-          }
-          break;
-
-        default:
-          logger.warn('Unknown timer trigger action', { action: trigger.action, roomId });
-      }
-    } catch (error) {
-      logger.error('Error executing timer trigger action', { roomId, trigger, error: error.message });
-    }
-  }
-
-  /**
-   * Clear all timers for a room (cleanup)
-   */
   clearRoomTimers(roomId) {
-    this.stopTimer(roomId, 'main');
-    this.stopTimer(roomId, 'secondary');
-    this.activeTimers.delete(roomId);
-    this.activeSecondaryTimers.delete(roomId);
-    this.triggeredActions.delete(roomId);
-
+    for (const type of ['main', 'secondary']) {
+      const timer = this.mapFor(type).get(roomId);
+      if (timer && timer.interval) clearInterval(timer.interval);
+      this.mapFor(type).delete(roomId);
+    }
     logger.debug(`Cleared all timers for room ${roomId}`);
   }
 
-  /**
-   * Clear all timers (server shutdown)
-   */
   clearAllTimers() {
-    for (const [roomId] of this.activeTimers) {
-      this.clearRoomTimers(roomId);
-    }
-
+    const rooms = new Set([...this.activeTimers.keys(), ...this.activeSecondaryTimers.keys()]);
+    for (const roomId of rooms) this.clearRoomTimers(roomId);
     logger.info('All timers cleared');
   }
 }

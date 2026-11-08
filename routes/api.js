@@ -6,229 +6,24 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 
-// Trigger processing system
-function checkAndExecuteTriggers(roomId, variableName, newValue, io) {
-  try {
-    console.log('Checking triggers for:', { roomId, variableName, newValue });
-    const db = getDatabase();
-    const room = db.prepare('SELECT config FROM rooms WHERE id = ?').get(roomId);
-    
-    if (!room || !room.config) {
-      console.log('No room or config found');
-      return;
-    }
-    
-    let config = {};
-    try {
-      config = JSON.parse(room.config);
-    } catch (e) {
-      console.log('Invalid config JSON');
-      return; // Invalid config JSON
-    }
-    
-    const triggers = config.triggers || [];
-    console.log('Found triggers:', triggers.length);
-    
-    triggers.forEach((trigger, index) => {
-      console.log(`Checking trigger ${index}:`, trigger);
-      if (trigger.variable === variableName) {
-        const conditionResult = evaluateCondition(trigger, newValue);
-        console.log(`Condition result:`, conditionResult);
-        if (conditionResult) {
-          console.log('Executing trigger actions:', trigger.actions);
-          executeTriggerActions(roomId, trigger.actions, io);
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Error processing triggers:', error);
-  }
+const { getServices } = require('../src/services/registry');
+const { createUpload } = require('../src/routes/upload');
+
+/**
+ * Legacy trigger entry point, kept for older callers. Variable changes now go
+ * through VariableService, which runs automations itself.
+ */
+function checkAndExecuteTriggers(roomId, variableName, newValue) {
+  const services = getServices();
+  if (!services) return;
+  return services.automationEngine.handleEvent(roomId, { type: 'variable', name: variableName, value: newValue, previous: undefined });
 }
 
-function evaluateCondition(trigger, value) {
-  const { condition, value: triggerValue } = trigger;
-  console.log('Evaluating condition:', { 
-    condition, 
-    triggerValue, 
-    actualValue: value, 
-    triggerValueType: typeof triggerValue,
-    actualValueType: typeof value 
-  });
-  
-  let result = false;
-  switch (condition) {
-    case 'equals':
-      result = String(value) === String(triggerValue);
-      break;
-    case 'not_equals':
-      result = String(value) !== String(triggerValue);
-      break;
-    case 'greater_than':
-      result = Number(value) > Number(triggerValue);
-      break;
-    case 'less_than':
-      result = Number(value) < Number(triggerValue);
-      break;
-    case 'contains':
-      result = String(value).includes(String(triggerValue));
-      break;
-    case 'changes_to':
-      result = String(value) === String(triggerValue);
-      break;
-    case 'changes_from':
-      // This would require storing previous values, implement if needed
-      result = false;
-      break;
-    default:
-      result = false;
-  }
-  
-  console.log('Condition evaluation result:', result);
-  return result;
+function getIo(req) {
+  return (req && req.app && req.app.get('io')) || (getServices() && getServices().io) || null;
 }
 
-function executeTriggerActions(roomId, actions, io) {
-  actions.forEach(action => {
-    try {
-      switch (action.type) {
-        case 'play_sound':
-          io.to(roomId).emit('play_sound', {
-            file: action.file,
-            volume: action.volume || 50
-          });
-          break;
-        
-        case 'show_media':
-          io.to(roomId).emit('show_media', {
-            file: action.file,
-            duration: action.duration || 5
-          });
-          break;
-        
-        case 'show_message':
-          io.to(roomId).emit('show_message', {
-            text: action.text,
-            duration: action.duration || 3
-          });
-          break;
-        
-        case 'set_variable':
-          // Recursively set another variable (be careful of loops!)
-          updateVariable(roomId, action.variable, action.value);
-          break;
-        
-        case 'timer_control':
-          io.to(roomId).emit('timer_control', {
-            action: action.action,
-            amount: action.amount || 0
-          });
-          break;
-        
-        case 'send_webhook':
-          executeWebhook(action);
-          break;
-        
-        case 'change_theme':
-          io.to(roomId).emit('change_theme', {
-            theme: action.theme
-          });
-          break;
-        
-        case 'trigger_layout':
-          io.to(roomId).emit('change_layout', {
-            layout: action.layout
-          });
-          break;
-      }
-    } catch (error) {
-      console.error('Error executing trigger action:', error);
-    }
-  });
-}
-
-function updateVariable(roomId, varName, value) {
-  try {
-    const db = getDatabase();
-    const room = db.prepare('SELECT api_variables FROM rooms WHERE id = ?').get(roomId);
-    
-    if (!room) return;
-    
-    let variables = {};
-    try {
-      variables = JSON.parse(room.api_variables || '{}');
-    } catch (e) {
-      variables = {};
-    }
-    
-    variables[varName] = value;
-    
-    const updateStmt = db.prepare('UPDATE rooms SET api_variables = ? WHERE id = ?');
-    updateStmt.run(JSON.stringify(variables), roomId);
-    
-    // Broadcast the update
-    const { io } = require('../server');
-    io.to(roomId).emit('variable_updated', {
-      var: varName,
-      value: value,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error updating variable:', error);
-  }
-}
-
-function executeWebhook(action) {
-  // Simple webhook implementation using fetch
-  const https = require('https');
-  const http = require('http');
-  const url = require('url');
-  
-  try {
-    const parsedUrl = url.parse(action.url);
-    const protocol = parsedUrl.protocol === 'https:' ? https : http;
-    
-    const options = {
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-      path: parsedUrl.path,
-      method: action.method || 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    };
-    
-    const req = protocol.request(options, (res) => {
-      console.log(`Webhook ${action.url} responded with status: ${res.statusCode}`);
-    });
-    
-    req.on('error', (error) => {
-      console.error('Webhook error:', error);
-    });
-    
-    if (action.method !== 'GET') {
-      req.write(JSON.stringify(action.payload || {}));
-    }
-    
-    req.end();
-  } catch (error) {
-    console.error('Webhook execution error:', error);
-  }
-}
-
-const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
-try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (_) {}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname || '');
-    const base = nanoid(8);
-    cb(null, `${Date.now()}_${base}${ext}`);
-  }
-});
-const upload = multer({ storage });
+const upload = createUpload();
 
 const router = express.Router();
 
@@ -467,221 +262,53 @@ router.delete('/rooms/:id', (req, res) => {
 });
 
 /**
- * Get variables for a room
+ * Get variables for a room (user variables + live timer variables)
  */
 router.get('/rooms/:id/variables', (req, res) => {
-  try {
-    const { id } = req.params;
-    const db = getDatabase();
-
-    const room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(id);
-    if (!room) {
-      return res.status(404).json({ success: false, error: 'Room not found' });
-    }
-
-    // Parse api_variables JSON column
-    let variables = {};
-    try {
-      variables = JSON.parse(room.api_variables || '{}');
-    } catch (e) {
-      console.warn(`Invalid JSON in api_variables for room ${id}:`, e);
-      variables = {};
-    }
-
-    // Convert to array format similar to legacy endpoint
-    const variablesArray = Object.entries(variables).map(([name, value], index) => ({
-      id: index + 1, // Generate simple ID for compatibility
-      room_id: id,
-      name: name,
-      type: Array.isArray(value) ? 'array' :
-           typeof value === 'boolean' ? 'boolean' :
-           typeof value === 'number' ? 'integer' : 'string',
-      value: typeof value === 'string' ? value : JSON.stringify(value),
-      // Include original value for advanced use cases
-      parsed_value: value
-    }));
-
-    res.json({ success: true, data: variablesArray });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+  const { variableService } = getServices();
+  const vars = variableService.getAllVariables(req.params.id);
+  if (vars === null) return res.status(404).json({ success: false, error: 'Room not found' });
+  res.json({ success: true, data: variableService.toLegacyArray(req.params.id, vars) });
 });
 
 /**
  * Add or update a variable in a room
  */
 router.post('/rooms/:id/variables', (req, res) => {
+  const { name, type = 'auto', value } = req.body || {};
+  if (!name || value === undefined) {
+    return res.status(400).json({ success: false, error: 'Name and value are required' });
+  }
   try {
-    const { id } = req.params;
-    const { name, type, value } = req.body;
-
-    if (!name || !type || value === undefined) {
-      return res.status(400).json({
-        success: false,
-        error: 'Name, type, and value are required'
-      });
-    }
-
-    // Support legacy types plus array/object for JSON compatibility
-    const validTypes = ['boolean', 'integer', 'number', 'string', 'array', 'object'];
-    if (!validTypes.includes(type)) {
-      return res.status(400).json({
-        success: false,
-        error: `Type must be one of: ${validTypes.join(', ')}`
-      });
-    }
-
-    const db = getDatabase();
-    const room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(id);
-    if (!room) {
-      return res.status(404).json({ success: false, error: 'Room not found' });
-    }
-
-    // Parse current api_variables
-    let variables = {};
-    try {
-      variables = JSON.parse(room.api_variables || '{}');
-    } catch (e) {
-      console.warn(`Invalid JSON in api_variables for room ${id}:`, e);
-      variables = {};
-    }
-
-    // Process value based on type (maintain compatibility with legacy string-based approach)
-    let processedValue;
-    switch (type) {
-      case 'boolean':
-        processedValue = Boolean(value);
-        break;
-      case 'integer':
-      case 'number':  // Accept both "number" and "integer"
-        processedValue = Number(value);
-        if (isNaN(processedValue)) {
-          return res.status(400).json({ success: false, error: 'Invalid number value' });
-        }
-        break;
-      case 'array':
-      case 'object':
-        try {
-          processedValue = JSON.parse(value);
-        } catch (e) {
-          return res.status(400).json({ success: false, error: 'Invalid JSON value' });
-        }
-        break;
-      default: // string
-        processedValue = String(value);
-    }
-
-    // Add/update variable in the JSON object
-    variables[name] = processedValue;
-
-    // Update the api_variables column
-    const updateStmt = db.prepare('UPDATE rooms SET api_variables = ? WHERE id = ?');
-    updateStmt.run(JSON.stringify(variables), id);
-
-    // Return in format compatible with legacy endpoint
-    const variableResponse = {
-      id: Date.now(), // Generate a fake ID for compatibility
-      room_id: id,
-      name: name,
-      type: type,
-      value: String(value),
-      parsed_value: processedValue // Include original value for advanced use cases
-    };
-
-    res.status(201).json({ success: true, data: variableResponse });
+    const { variableService } = getServices();
+    const result = variableService.setVariable(req.params.id, name, value, { type, source: 'api' });
+    res.status(201).json({
+      success: true,
+      data: { id: Date.now(), room_id: req.params.id, name, type, value: String(value), parsed_value: result.value }
+    });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
 });
 
 /**
- * Update a specific variable in a room via URL parameters
+ * Update a specific variable in a room via URL parameters (hardware friendly)
  */
 router.post('/rooms/:roomId/variables/:varName', (req, res) => {
+  const body = req.body || {};
+  const value = body.value !== undefined ? body.value : req.query.value;
+  if (value === undefined) {
+    return res.status(400).json({ success: false, error: 'Value is required in request body' });
+  }
   try {
-    const { roomId, varName } = req.params;
-    const { value, type = 'string' } = req.body;
-    console.log('Variable update API called:', { roomId, varName, body: req.body });
-
-    if (value === undefined) {
-      return res.status(400).json({
-        success: false,
-        error: 'Value is required in request body'
-      });
-    }
-
-    const db = getDatabase();
-    const room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(roomId);
-    
-    if (!room) {
-      return res.status(404).json({ success: false, error: 'Room not found' });
-    }
-
-    let variables = {};
-    try {
-      variables = JSON.parse(room.api_variables || '{}');
-    } catch (e) {
-      console.warn(`Invalid JSON in api_variables for room ${roomId}:`, e);
-      variables = {};
-    }
-
-    // Process value based on type
-    let processedValue;
-    switch (type) {
-      case 'boolean':
-        processedValue = Boolean(value);
-        break;
-      case 'integer':
-      case 'number':  // Accept both "number" and "integer"
-        processedValue = Number(value);
-        if (isNaN(processedValue)) {
-          return res.status(400).json({
-            success: false,
-            error: 'Invalid number value'
-          });
-        }
-        break;
-      case 'array':
-      case 'object':
-        try {
-          processedValue = JSON.parse(value);
-        } catch (e) {
-          return res.status(400).json({
-            success: false,
-            error: 'Invalid JSON value'
-          });
-        }
-        break;
-      default: // string
-        processedValue = String(value);
-    }
-
-    variables[varName] = processedValue;
-
-    const updateStmt = db.prepare('UPDATE rooms SET api_variables = ? WHERE id = ?');
-    updateStmt.run(JSON.stringify(variables), roomId);
-
-    // Broadcast update via Socket.IO  
-    // Note: io instance should be passed from server to avoid circular dependency
-    const server = require('../server');
-    const io = server.io;
-    if (io) {
-      io.to(roomId).emit('variable_updated', {
-        var: varName,
-        value: processedValue,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Check and execute triggers
-    checkAndExecuteTriggers(roomId, varName, processedValue, io);
-
-    res.status(201).json({
-      success: true,
-      data: { [varName]: processedValue }
+    const { variableService } = getServices();
+    const result = variableService.setVariable(req.params.roomId, req.params.varName, value, {
+      type: body.type || req.query.type || 'auto',
+      source: 'api'
     });
+    res.status(201).json({ success: true, data: { [result.name]: result.value } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
 });
 
@@ -1578,7 +1205,7 @@ router.put('/rooms/:id/layout', (req, res) => {
 
     // Broadcast layout update via Socket.IO if available
     try {
-      const { io } = require('../server');
+      const io = getIo(req);
       io.to(id).emit('layout_updated', {
         layout: layout,
         timestamp: new Date().toISOString()
@@ -1908,7 +1535,7 @@ router.post('/rooms/:roomId/apply-template/:templateId', (req, res) => {
     
     // Broadcast layout update via Socket.IO if available
     try {
-      const { io } = require('../server');
+      const io = getIo(req);
       io.to(roomId).emit('layout_updated', {
         layout: layout,
         timestamp: new Date().toISOString()
@@ -2253,7 +1880,7 @@ router.post('/rooms/:roomId/theme', (req, res) => {
     
     // Broadcast layout update via Socket.IO if available
     try {
-      const { io } = require('../server');
+      const io = getIo(req);
       io.to(roomId).emit('layout_updated', {
         layout: layout,
         themeId: themeId,
