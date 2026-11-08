@@ -576,3 +576,17 @@ dialog.modal.modal-sm { width: min(420px, calc(100vw - 32px)); }
 .room-avatar { display: inline-grid; place-items: center; flex: none; overflow: hidden; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
 .room-avatar.has-img { background: var(--surface-3); box-shadow: 0 0 0 2px var(--ra, var(--accent)); }
 .room-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ------------------------------------------------------ tabs inside drawers */
+/* Keep every tab visible: compact spacing, drop icons when the drawer is
+   narrow, and wrap onto two rows on phones instead of silently clipping. */
+.drawer { container-type: inline-size; container-name: drawer; }
+.drawer .tabs .tab { flex: 1 1 auto; justify-content: center; padding: 10px 8px; gap: 6px; }
+@container drawer (max-width: 639px) {
+  .drawer .tabs .tab i { display: none; }
+  .drawer .tabs .tab { padding: 10px 7px; }
+}
+@container drawer (max-width: 480px) {
+  .drawer .tabs { flex-wrap: wrap; overflow: visible; }
+  .drawer .tabs .tab { flex: 1 0 auto; padding: 8px 8px; }
+}

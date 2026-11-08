@@ -766,30 +766,10 @@
     view.innerHTML = html`
       <div class="settings-grid">
         <section class="card">
-          <div class="card-head"><i class="icon-sparkles" style="color:var(--accent);font-size:18px"></i><div class="grow"><h2>AI theme assistant</h2><div class="sub">Powered by OpenRouter – your key stays on this server</div></div>
-            ${ai.configured ? raw('<span class="badge badge-success"><i class="icon-check"></i>Connected</span>') : raw('<span class="badge">Not set up</span>')}</div>
-          <div class="card-body stack-lg">
-            <div class="field">
-              <label for="st-key">OpenRouter API key</label>
-              <div class="row">
-                <input class="input mono grow" id="st-key" type="password" autocomplete="off" placeholder="${ai.configured ? ai.keyPreview : 'sk-or-v1-…'}">
-                <button class="btn" id="st-test"><i class="icon-plug-zap"></i>Test</button>
-              </div>
-              <div class="hint">${ai.source === 'environment' ? 'Currently using OPENROUTER_API_KEY from the server environment. Saving a key here overrides it.' : raw('Create a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Leave blank to keep the current key.')}</div>
-            </div>
-            <div class="field">
-              <label for="st-model">Model</label>
-              <div class="row">
-                <select class="select grow" id="st-model"><option value="">Automatic (newest Claude Sonnet)</option>${ai.model ? raw(html`<option value="${ai.model}" selected>${ai.model}</option>`) : ''}</select>
-                <button class="btn" id="st-load-models"><i class="icon-refresh-cw"></i>Load models</button>
-              </div>
-              <div class="hint" id="st-model-hint">Strong coding models give the best themes. Prices are per million tokens.</div>
-            </div>
-            <div class="row">
-              ${ai.source === 'settings' ? raw('<button class="btn btn-ghost" id="st-remove"><i class="icon-trash-2"></i>Remove saved key</button>') : ''}
-              <div class="spacer"></div>
-              <button class="btn btn-primary" id="st-save-ai"><i class="icon-check"></i>Save</button>
-            </div>
+          <div class="card-head"><i class="icon-sun-moon" style="color:var(--warning);font-size:18px"></i><h2 class="grow">Appearance</h2></div>
+          <div class="card-body row">
+            <div class="grow"><div style="font-weight:600">Operator interface theme</div><div class="muted small">Dark is easier on the eyes in a control room. Saved per browser.</div></div>
+            <div class="segmented" id="st-mode"><button data-v="dark"><i class="icon-moon"></i>Dark</button><button data-v="light"><i class="icon-sun"></i>Light</button></div>
           </div>
         </section>
 
@@ -819,10 +799,30 @@
         </section>
 
         <section class="card">
-          <div class="card-head"><i class="icon-sun-moon" style="color:var(--warning);font-size:18px"></i><h2 class="grow">Appearance</h2></div>
-          <div class="card-body row">
-            <div class="grow"><div style="font-weight:600">Operator interface theme</div><div class="muted small">Dark is easier on the eyes in a control room. Saved per browser.</div></div>
-            <div class="segmented" id="st-mode"><button data-v="dark"><i class="icon-moon"></i>Dark</button><button data-v="light"><i class="icon-sun"></i>Light</button></div>
+          <div class="card-head"><i class="icon-sparkles" style="color:var(--accent);font-size:18px"></i><div class="grow"><h2>AI theme assistant</h2><div class="sub">Powered by OpenRouter – your key stays on this server</div></div>
+            ${ai.configured ? raw('<span class="badge badge-success"><i class="icon-check"></i>Connected</span>') : raw('<span class="badge">Not set up</span>')}</div>
+          <div class="card-body stack-lg">
+            <div class="field">
+              <label for="st-key">OpenRouter API key</label>
+              <div class="row">
+                <input class="input mono grow" id="st-key" type="password" autocomplete="off" placeholder="${ai.configured ? ai.keyPreview : 'sk-or-v1-…'}">
+                <button class="btn" id="st-test"><i class="icon-plug-zap"></i>Test</button>
+              </div>
+              <div class="hint">${ai.source === 'environment' ? 'Currently using OPENROUTER_API_KEY from the server environment. Saving a key here overrides it.' : raw('Create a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Leave blank to keep the current key.')}</div>
+            </div>
+            <div class="field">
+              <label for="st-model">Model</label>
+              <div class="row">
+                <select class="select grow" id="st-model"><option value="">Automatic (newest Claude Sonnet)</option>${ai.model ? raw(html`<option value="${ai.model}" selected>${ai.model}</option>`) : ''}</select>
+                <button class="btn" id="st-load-models"><i class="icon-refresh-cw"></i>Load models</button>
+              </div>
+              <div class="hint" id="st-model-hint">Strong coding models give the best themes. Prices are per million tokens.</div>
+            </div>
+            <div class="row">
+              ${ai.source === 'settings' ? raw('<button class="btn btn-ghost" id="st-remove"><i class="icon-trash-2"></i>Remove saved key</button>') : ''}
+              <div class="spacer"></div>
+              <button class="btn btn-primary" id="st-save-ai"><i class="icon-check"></i>Save</button>
+            </div>
           </div>
         </section>
       </div>`;
