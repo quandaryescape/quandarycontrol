@@ -451,3 +451,109 @@ describe('room icon', () => {
     expect(cleared.body.data.appearance.accent).toBe('#f2555a');
   });
 });
+
+describe('auto-clear idle rooms between games', () => {
+  function captureEmits() {
+    const sent = [];
+    const io = instance.io;
+    const original = io.to.bind(io);
+    io.to = (target) => ({ emit: (ev, data) => { sent.push([target, ev, data]); return original(target).emit(ev, data); } });
+    return { sent, restore: () => { io.to = original; } };
+  }
+  const MIN = 60 * 1000;
+
+  afterEach(async () => {
+    await request(app).put('/api/v2/settings').send({ autoClear: { enabled: true, minutes: 15 } });
+  });
+
+  test('setting is on by default (15 min) and validated', async () => {
+    const res = await request(app).get('/api/v2/settings');
+    expect(res.body.data.autoClear).toEqual({ enabled: true, minutes: 15 });
+    const upd = await request(app).put('/api/v2/settings').send({ autoClear: { minutes: 20 } });
+    expect(upd.body.data.autoClear).toEqual({ enabled: true, minutes: 20 });
+    await request(app).put('/api/v2/settings').send({ autoClear: { minutes: 0 } }).expect(400);
+  });
+
+  test('clears hints and chat quietly once the room has been idle long enough', async () => {
+    const room = await createRoom();
+    const idle = instance.idleClear;
+    idle.touch(room.id, { hints: true, chat: true });
+    const cap = captureEmits();
+    try {
+      expect(idle.check(Date.now() + 14 * MIN)).toEqual([]);          // not yet
+      expect(idle.check(Date.now() + 16 * MIN)).toContain(room.id);   // idle > 15 min
+      const forRoom = cap.sent.filter(([t]) => t === room.id).map(([, ev, d]) => [ev, d && d.silent]);
+      expect(forRoom).toEqual(expect.arrayContaining([['clear_hints', true], ['clear_chat', true], ['close_overlays', true]]));
+      expect(cap.sent.some(([t, ev]) => t === `gm_${room.id}` && ev === 'auto_cleared')).toBe(true);
+      expect(idle.check(Date.now() + 60 * MIN)).not.toContain(room.id); // nothing left to clear
+    } finally { cap.restore(); }
+  });
+
+  test('never clears while a timer is running, and not when turned off', async () => {
+    const room = await createRoom({ timer: { duration: 3600 } });
+    const idle = instance.idleClear;
+    const ts = instance.timerService;
+    ts.initializeTimer(room.id, 3600, 'main');
+    ts.startTimer(room.id, 'main', instance.io);
+    idle.touch(room.id, { hints: true });
+    expect(idle.check(Date.now() + 120 * MIN)).not.toContain(room.id);
+    ts.pauseTimer(room.id, 'main', instance.io); // pausing counts as activity, then the idle clock starts
+
+    await request(app).put('/api/v2/settings').send({ autoClear: { enabled: false } });
+    expect(idle.check(Date.now() + 120 * MIN)).toEqual([]);
+    await request(app).put('/api/v2/settings').send({ autoClear: { enabled: true } });
+    expect(idle.check(Date.now() + 16 * MIN)).toContain(room.id);
+  });
+
+  test('a manual clear by the GM means there is nothing left to auto-clear', async () => {
+    const room = await createRoom();
+    const idle = instance.idleClear;
+    idle.touch(room.id, { hints: true });
+    idle.cleared(room.id, { hints: true });
+    expect(idle.check(Date.now() + 60 * MIN)).not.toContain(room.id);
+  });
+});
+
+describe('immersive hint/chat wording', () => {
+  test('defaults, custom values, and an empty message meaning "show nothing"', async () => {
+    const room = await createRoom();
+    expect(room.hints).toMatchObject({ clearedMessage: 'Hints have been cleared', chatClearedMessage: 'Chat cleared', gmName: 'GM', playerName: 'Player' });
+
+    const res = await request(app).put(`/api/v2/rooms/${room.id}`).send({
+      hints: { gmName: '  Dr. Moreau ', playerName: 'Test Subjects', clearedMessage: 'The voices fall silent…', chatClearedMessage: '' }
+    });
+    expect(res.body.data.hints).toMatchObject({ gmName: 'Dr. Moreau', playerName: 'Test Subjects', clearedMessage: 'The voices fall silent…', chatClearedMessage: '' });
+
+    // Player screens read these from the legacy hints endpoint and the public room endpoint
+    const legacy = await request(app).get(`/api/rooms/${room.id}/hints`);
+    expect(legacy.body.data).toMatchObject({ gmName: 'Dr. Moreau', playerName: 'Test Subjects', chatClearedMessage: '' });
+    const pub = await request(app).get(`/api/v2/rooms/${room.shortcode}/public`);
+    expect(pub.body.data.hints.gmName).toBe('Dr. Moreau');
+  });
+
+  test('player-facing endpoints never expose saved hints or GM notes', async () => {
+    const room = await createRoom();
+    await request(app).put(`/api/v2/rooms/${room.id}`).send({
+      gmNotes: 'SAFE CODE 4471',
+      hints: { presets: [{ text: 'SECRET: the answer is 42', category: 'Finale' }] }
+    });
+    const responses = await Promise.all([
+      request(app).get('/api/rooms'),
+      request(app).get(`/api/rooms/${room.id}`),
+      request(app).get(`/api/shortcode/${room.shortcode}`),
+      request(app).get(`/api/rooms/${room.id}/hints`),
+      request(app).get(`/api/v1/rooms/${room.id}`),
+      request(app).get(`/api/v1/rooms/${room.id}/hints`),
+      request(app).get(`/api/v2/rooms/${room.shortcode}/public`)
+    ]);
+    for (const r of responses) {
+      expect(r.status).toBe(200);
+      expect(r.text).not.toContain('SAFE CODE 4471');
+      expect(r.text).not.toContain('the answer is 42');
+    }
+    // the GM's own endpoint still has them
+    const full = await request(app).get(`/api/v2/rooms/${room.id}`);
+    expect(full.body.data.gmNotes).toBe('SAFE CODE 4471');
+    expect(full.body.data.hints.presets[0].text).toContain('the answer is 42');
+  });
+});

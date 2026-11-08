@@ -3,6 +3,7 @@ const { nanoid } = require('nanoid');
 const { getDatabase } = require('../../../../db/database');
 const { parseVariables, TIMER_VARIABLE_NAMES } = require('../../../services/variable-service');
 const themeService = require('../../../services/theme-service');
+const { hintDisplay } = require('../../../services/room-privacy');
 const { asyncRoute, httpError, ok, safeJson, requireRoom, services } = require('./helpers');
 
 const router = express.Router();
@@ -88,7 +89,7 @@ function toRoomDTO(row, { includeVariables = true } = {}) {
       secondaryLabel: config.secondaryTimerLabel || 'Secondary timer'
     },
     hints: {
-      type: hintConfig.type === 'chat' ? 'chat' : 'broadcast',
+      ...hintDisplay(hintConfig),
       presets: cleanPresets(hintConfig.presets),
       limit: Number(hintConfig.limit) || 0
     },
@@ -135,6 +136,9 @@ function applyRoomUpdate(db, room, body) {
     if (body.hints.type !== undefined) hintConfig.type = body.hints.type === 'chat' ? 'chat' : 'broadcast';
     if (body.hints.presets !== undefined) hintConfig.presets = cleanPresets(body.hints.presets);
     if (body.hints.limit !== undefined) hintConfig.limit = Math.max(0, Math.min(99, parseInt(body.hints.limit, 10) || 0));
+    for (const [key, max] of [['clearedMessage', 200], ['chatClearedMessage', 200], ['gmName', 40], ['playerName', 40]]) {
+      if (body.hints[key] !== undefined) hintConfig[key] = body.hints[key] === null ? null : String(body.hints[key]).slice(0, max);
+    }
   }
 
   sets.push('config = ?'); vals.push(JSON.stringify(config));
@@ -180,7 +184,7 @@ router.get('/rooms/:id', asyncRoute(async (req, res) => {
 router.get('/rooms/:id/public', asyncRoute(async (req, res) => {
   const room = resolveRoom(req.params.id);
   const dto = toRoomDTO(room, { includeVariables: false });
-  ok(res, { id: dto.id, name: dto.name, shortcode: dto.shortcode, theme: dto.theme, hints: { type: dto.hints.type }, slideshows: dto.stats.slideshows, appearance: { accent: dto.appearance.accent, icon: dto.appearance.icon } });
+  ok(res, { id: dto.id, name: dto.name, shortcode: dto.shortcode, theme: dto.theme, hints: hintDisplay(safeJson(room.hint_config, {})), slideshows: dto.stats.slideshows, appearance: { accent: dto.appearance.accent, icon: dto.appearance.icon } });
 }));
 
 router.put('/rooms/:id', asyncRoute(async (req, res) => {
@@ -201,14 +205,15 @@ router.put('/rooms/:id', asyncRoute(async (req, res) => {
   }
 
   const dto = toRoomDTO(updated);
-  io.to(room.id).emit('room_updated', { id: dto.id, name: dto.name, theme: dto.theme, hints: { type: dto.hints.type }, timer: dto.timer, appearance: dto.appearance });
+  io.to(room.id).emit('room_updated', { id: dto.id, name: dto.name, theme: dto.theme, hints: hintDisplay(safeJson(updated.hint_config, {})), timer: dto.timer, appearance: dto.appearance });
   ok(res, dto);
 }));
 
 router.delete('/rooms/:id', asyncRoute(async (req, res) => {
   const room = requireRoom(req.params.id);
-  const { timerService, automationEngine } = services();
+  const { timerService, automationEngine, idleClear } = services();
   getDatabase().prepare('DELETE FROM rooms WHERE id = ?').run(room.id);
+  if (idleClear) idleClear.forget(room.id);
   timerService.clearRoomTimers(room.id);
   automationEngine.invalidate(room.id);
   ok(res, { id: room.id });
@@ -347,14 +352,16 @@ router.post('/rooms/:id/hint', asyncRoute(async (req, res) => {
   const room = resolveRoom(req.params.id);
   const message = String((req.body && req.body.message) || req.query.message || '').trim();
   if (!message) throw httpError(400, 'message is required');
-  const { io, automationEngine } = services();
+  const { io, automationEngine, idleClear } = services();
   const hint = { message: message.slice(0, 1000), timestamp: new Date().toISOString(), source: 'api' };
   io.to(room.id).emit('hintReceived', hint);
+  if (idleClear) idleClear.touch(room.id, { hints: true });
   automationEngine.onRoomEvent(room.id, 'hint_sent', { message: hint.message }).catch(() => {});
   ok(res, hint);
 }));
 
 module.exports = router;
 module.exports.toRoomDTO = toRoomDTO;
+module.exports.hintDisplay = hintDisplay;
 module.exports.resolveRoom = resolveRoom;
 module.exports.TIMER_VARIABLE_NAMES = TIMER_VARIABLE_NAMES;

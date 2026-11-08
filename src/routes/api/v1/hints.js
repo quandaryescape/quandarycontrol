@@ -37,7 +37,7 @@ router.get('/rooms/:id/hints', (req, res) => {
       ip: req.ip
     });
 
-    res.json({ success: true, data: hints });
+    res.json({ success: true, data: require('../../../services/room-privacy').publicHints(hints) });
   } catch (error) {
     hintLogger.error('Error retrieving hints configuration', {
       roomId: req.params.id,

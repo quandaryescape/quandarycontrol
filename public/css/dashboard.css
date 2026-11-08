@@ -137,3 +137,8 @@
 .look-preview .lp-timer { font-size: 40px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 .look-preview .lp-btn { background: var(--lp-accent); padding: 8px 14px; border-radius: 8px; font-weight: 650; font-size: 13px; }
 :root[data-theme="light"] .look-preview .lp-name, :root[data-theme="light"] .look-preview .lp-timer { color: var(--text); }
+
+/* Chat wording preview (room settings > Hints) */
+.chat-preview { font-family: var(--mono); font-size: 12.5px; background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.chat-preview .cleared { color: #ff6b6b; }
+.chat-preview .cleared-hint { color: var(--text-faint); font-family: var(--font); margin-top: 6px; }

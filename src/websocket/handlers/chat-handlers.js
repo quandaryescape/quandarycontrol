@@ -7,6 +7,7 @@ const chatLogger = logger.child({ module: 'chat-websocket' });
  */
 function setupChatHandlers(socket, io, services = {}) {
   const engine = services.automationEngine;
+  const idle = services.idleClear;
 
   function broadcastHint(roomId, message) {
     const hintData = {
@@ -18,6 +19,7 @@ function setupChatHandlers(socket, io, services = {}) {
     // Legacy event for older themes
     io.to(roomId).emit('receive_hint', message);
     socket.emit('hintConfirmed', message);
+    if (idle) idle.touch(roomId, { hints: true });
     if (engine) engine.onRoomEvent(roomId, 'hint_sent', { message }).catch(() => {});
   }
 
@@ -54,6 +56,7 @@ function setupChatHandlers(socket, io, services = {}) {
     };
 
     io.to(roomId).emit('chat_message', payload);
+    if (idle) idle.touch(roomId, { chat: true });
 
     if (engine) {
       const eventName = safeSender === 'player' ? 'player_message' : 'gm_message';
@@ -70,16 +73,19 @@ function setupChatHandlers(socket, io, services = {}) {
   socket.on('clear_chat', ({ roomId } = {}) => {
     if (!roomId) return socket.emit('error', 'Invalid room ID');
     io.to(roomId).emit('clear_chat');
+    if (idle) idle.cleared(roomId, { chat: true });
   });
 
   socket.on('clear_hints', ({ roomId } = {}) => {
     if (!roomId) return socket.emit('error', 'Invalid room ID');
     io.to(roomId).emit('clear_hints');
+    if (idle) idle.cleared(roomId, { hints: true });
   });
 
   // Lightbox media display handler (supports text-only + autoclose settings)
   socket.on('show_lightbox', ({ roomId, mediaId, url, headline, autoCloseEnabled = true, autoCloseSeconds = 5 } = {}) => {
     if (!roomId) return socket.emit('error', 'Invalid lightbox parameters');
+    if (idle) idle.touch(roomId, { overlays: true });
     io.to(roomId).emit('show_lightbox', {
       mediaId: mediaId || null,
       url: url || null,

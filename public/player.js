@@ -29,6 +29,8 @@ let roomShortcode = null;
 let variables = {};
 let hints = [];
 let hintType = 'broadcast';
+// Per-room wording set in Room settings > Hints (keeps the game immersive)
+let hintDisplay = { clearedMessage: 'Hints have been cleared', chatClearedMessage: 'Chat cleared', gmName: 'GM', playerName: 'Player' };
 let autoCloseTimerId = null;
 let allowManualClose = true;
 
@@ -356,13 +358,14 @@ function handleConfigUpdate(config) {
 }
 
 // Clear chat handler for GM-initiated clear
-function handleClearChat() {
-    clearChat();
+// data.silent = automatic between-games reset: wipe without a "cleared" notice
+function handleClearChat(data) {
+    clearChat(!!(data && data.silent));
 }
 
 // Clear hints handler for GM-initiated clear
-function handleClearHints() {
-    clearHints();
+function handleClearHints(data) {
+    clearHints(!!(data && data.silent));
 }
 
 // Lightbox handler for GM-initiated media display
@@ -724,7 +727,7 @@ function handleChatMessage(payload) {
     if (!log) return;
     const row = document.createElement('div');
     row.className = 'chat-row';
-    const who = payload.sender === 'gm' ? 'GM' : 'Player';
+    const who = payload.sender === 'gm' ? (hintDisplay.gmName || 'GM') : (hintDisplay.playerName || 'Player');
     row.textContent = `[${new Date(payload.timestamp || Date.now()).toLocaleTimeString()}] ${who}: ${payload.message}`;
     log.appendChild(row);
     // scroll container
@@ -737,13 +740,29 @@ function handleChatMessage(payload) {
     }
 }
 
+function applyHintDisplay(cfg) {
+    cfg = cfg || {};
+    hintType = cfg.type === 'chat' ? 'chat' : 'broadcast';
+    ['clearedMessage', 'chatClearedMessage', 'gmName', 'playerName'].forEach(key => {
+        if (typeof cfg[key] === 'string') hintDisplay[key] = cfg[key];
+    });
+    if (elements.chatSection) elements.chatSection.style.display = (hintType === 'chat') ? '' : 'none';
+    if (elements.hintsSection) elements.hintsSection.style.display = (hintType === 'broadcast') ? '' : 'none';
+}
+
+// Pick up changes to hint mode / wording without reloading the screen
+socket.on('room_updated', (room) => {
+    if (room && room.hints) applyHintDisplay(room.hints);
+});
+
 async function fetchHintConfigAndToggle() {
     try {
         if (!roomId) return;
         const res = await fetch(`/api/rooms/${roomId}/hints`);
         const data = await res.json();
-        const type = (data && data.success && data.data && data.data.type) ? data.data.type : 'broadcast';
-        hintType = type === 'chat' ? 'chat' : 'broadcast';
+        const cfg = (data && data.success && data.data) || {};
+        applyHintDisplay(cfg);
+        return;
     } catch (e) {
         hintType = 'broadcast';
     }
@@ -790,29 +809,41 @@ function renderHints() {
 }
 
 // Clear chat function
-function clearChat() {
+function clearChat(silent) {
     const chatLog = elements.chatLog;
+    if (chatLog && silent) {
+        chatLog.innerHTML = '';
+        if (elements.chatInput) elements.chatInput.value = '';
+        return;
+    }
     if (chatLog) {
         chatLog.innerHTML = '';
-        // Add a message indicating chat was cleared
+        // Optional custom notice (empty = clear quietly)
+        const notice = (hintDisplay.chatClearedMessage || '').trim();
+        if (!notice) return;
         const row = document.createElement('div');
-        row.className = 'chat-row';
-        row.textContent = `[${new Date().toLocaleTimeString()}] System: Chat cleared`;
+        row.className = 'chat-row chat-cleared';
+        row.textContent = `[${new Date().toLocaleTimeString()}] ${notice}`;
         row.style.color = '#ff6b6b';
         chatLog.appendChild(row);
     }
 }
 
 // Clear hints function
-function clearHints() {
+function clearHints(silent) {
     hints = [];
     renderHints();
-    // Add a message indicating hints were cleared
+    if (silent) {
+        if (elements.hintOverlay) elements.hintOverlay.style.display = 'none';
+        return;
+    }
+    // Optional custom notice (empty = just show the empty hint area)
+    const notice = (hintDisplay.clearedMessage || '').trim();
     const container = elements.hintContainer;
-    if (container) {
+    if (container && notice) {
         container.innerHTML = `
-            <div class="hint-card">
-                <p>Hints have been cleared</p>
+            <div class="hint-card hints-cleared">
+                <p>${escapeHtml(notice)}</p>
                 <small>${new Date().toLocaleTimeString()}</small>
             </div>
         `;

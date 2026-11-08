@@ -76,6 +76,7 @@ function setupRoomHandlers(socket, io, timerService, services = {}) {
     roomLogger.info('Client joined room', { roomId, clientType, socketId: socket.id });
     broadcastPresence(io, roomId);
 
+    if (clientType === 'player' && services.idleClear) services.idleClear.playerJoined(roomId);
     if (clientType === 'player' && services.automationEngine) {
       services.automationEngine.onRoomEvent(roomId, 'player_connected', {}).catch(() => {});
     }

@@ -7,7 +7,7 @@ const controlLogger = logger.child({ module: 'control-websocket' });
  * slideshows on player screens.
  */
 function setupControlHandlers(socket, io, services = {}) {
-  const { automationEngine, variableService } = services;
+  const { automationEngine, variableService, idleClear } = services;
 
   function isGm(roomId) {
     return socket.clientType === 'gm' && socket.roomId === roomId;
@@ -45,12 +45,14 @@ function setupControlHandlers(socket, io, services = {}) {
 
   socket.on('show_message', ({ roomId, text, title, duration = 6, style = 'info' } = {}) => {
     if (!roomId || !isGm(roomId) || typeof text !== 'string' || !text.trim()) return;
+    if (idleClear) idleClear.touch(roomId, { overlays: true });
     io.to(roomId).emit('show_message', { text: text.slice(0, 2000), title: String(title || '').slice(0, 200), duration: Number(duration) || 0, style });
   });
 
   socket.on('close_overlays', ({ roomId } = {}) => {
     if (!roomId || !isGm(roomId)) return;
     io.to(roomId).emit('close_overlays');
+    if (idleClear) idleClear.cleared(roomId, { overlays: true });
   });
 
   socket.on('start_slideshow', ({ roomId, slideshowId } = {}) => {

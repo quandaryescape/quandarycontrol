@@ -66,7 +66,7 @@ router.get('/', (req, res) => {
       ip: req.ip
     });
 
-    res.json({ success: true, data: rooms });
+    res.json({ success: true, data: rooms.map(require('../../../services/room-privacy').publicRoomRow) });
   } catch (error) {
     roomLogger.error('Error retrieving rooms', {
       error: error.message,
@@ -91,7 +91,7 @@ router.get('/:id', validateRoomId, (req, res) => {
     }
 
     roomLogger.info('Room retrieved', { roomId: id, roomName: room.name, ip: req.ip });
-    res.json({ success: true, data: room });
+    res.json({ success: true, data: require('../../../services/room-privacy').publicRoomRow(room) });
   } catch (error) {
     roomLogger.error('Error retrieving room', {
       roomId: req.params.id,
@@ -122,7 +122,7 @@ router.get('/shortcode/:shortcode', (req, res) => {
       roomName: room.name,
       ip: req.ip
     });
-    res.json({ success: true, data: room });
+    res.json({ success: true, data: require('../../../services/room-privacy').publicRoomRow(room) });
   } catch (error) {
     roomLogger.error('Error retrieving room by shortcode', {
       shortcode: req.params.shortcode,

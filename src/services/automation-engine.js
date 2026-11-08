@@ -404,6 +404,7 @@ class AutomationEngine {
           style: action.style || 'info'
         };
         io && io.to(roomId).emit('show_message', payload);
+        if (this.idle) this.idle.touch(roomId, { overlays: true });
         return { detail: payload.text };
       }
 
@@ -416,6 +417,7 @@ class AutomationEngine {
           autoCloseSeconds: Number(action.duration) || 0
         };
         io && io.to(roomId).emit('show_lightbox', payload);
+        if (this.idle) this.idle.touch(roomId, { overlays: true });
         return { detail: payload.headline || payload.url || payload.mediaId };
       }
 
@@ -439,6 +441,7 @@ class AutomationEngine {
         if (!message) throw new Error('Hint message is empty');
         const hint = { message, timestamp: new Date().toISOString(), source: 'automation' };
         io && io.to(roomId).emit('hintReceived', hint);
+        if (this.idle) this.idle.touch(roomId, { hints: true });
         return { detail: message };
       }
 
@@ -519,6 +522,11 @@ class AutomationEngine {
         const cmd = action.command;
         if (!['clear_hints', 'clear_chat', 'reload_players', 'close_overlays'].includes(cmd)) throw new Error(`Unknown command "${cmd}"`);
         io && io.to(roomId).emit(cmd === 'reload_players' ? 'reload_player' : cmd);
+        if (this.idle) {
+          if (cmd === 'clear_hints') this.idle.cleared(roomId, { hints: true });
+          if (cmd === 'clear_chat') this.idle.cleared(roomId, { chat: true });
+          if (cmd === 'close_overlays') this.idle.cleared(roomId, { overlays: true });
+        }
         return { detail: cmd };
       }
 

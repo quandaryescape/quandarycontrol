@@ -2,6 +2,7 @@ const express = require('express');
 const os = require('os');
 const ai = require('../../../services/ai-service');
 const settings = require('../../../services/settings-service');
+const idleClear = require('../../../services/idle-clear-service');
 const { asyncRoute, httpError, ok } = require('./helpers');
 const pkg = require('../../../../package.json');
 
@@ -36,7 +37,8 @@ router.get('/system/info', asyncRoute(async (req, res) => {
 router.get('/settings', asyncRoute(async (req, res) => {
   ok(res, {
     ai: ai.status(),
-    publicUrl: settings.get('public_url') || ''
+    publicUrl: settings.get('public_url') || '',
+    autoClear: idleClear.getConfig()
   });
 }));
 
@@ -54,12 +56,15 @@ router.put('/settings', asyncRoute(async (req, res) => {
       settings.set('openrouter_model', model || null);
     }
   }
+  if (body.autoClear && typeof body.autoClear === 'object') {
+    idleClear.setConfig({ enabled: body.autoClear.enabled, minutes: body.autoClear.minutes });
+  }
   if (body.publicUrl !== undefined) {
     const url = String(body.publicUrl || '').trim().replace(/\/+$/, '');
     if (url && !/^https?:\/\/[^\s]+$/i.test(url)) throw httpError(400, 'Public URL must start with http:// or https://');
     settings.set('public_url', url || null);
   }
-  ok(res, { ai: ai.status(), publicUrl: settings.get('public_url') || '' });
+  ok(res, { ai: ai.status(), publicUrl: settings.get('public_url') || '', autoClear: idleClear.getConfig() });
 }));
 
 router.post('/settings/ai/test', asyncRoute(async (req, res) => {

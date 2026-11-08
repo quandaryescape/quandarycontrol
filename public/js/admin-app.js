@@ -479,6 +479,17 @@
             <div class="field" style="max-width:220px"><label for="rs-hint-limit">Hint limit <span class="faint">(0 = unlimited)</span></label>
               <input class="input" type="number" min="0" max="99" id="rs-hint-limit" value="${draft.hints.limit || 0}">
               <div class="hint">Shown to the GM as a counter; the GM can still send more.</div></div>
+            <div class="card"><div class="card-body stack">
+              <div class="row"><i class="icon-drama" style="font-size:18px;color:var(--accent)"></i><h3 class="grow">Wording players see</h3></div>
+              <p class="muted small">Keep it in character. Leave a “cleared” message empty to clear the screen without any notice.</p>
+              <div class="grid-2">
+                <div class="field"><label for="rs-gm-name">GM's name in chat</label><input class="input" id="rs-gm-name" maxlength="40" placeholder="GM" value="${draft.hints.gmName === 'GM' ? '' : draft.hints.gmName}"></div>
+                <div class="field"><label for="rs-player-name">Players' name in chat</label><input class="input" id="rs-player-name" maxlength="40" placeholder="Player" value="${draft.hints.playerName === 'Player' ? '' : draft.hints.playerName}"></div>
+              </div>
+              <div class="field"><label for="rs-hints-cleared">When the GM clears hints</label><input class="input" id="rs-hints-cleared" maxlength="200" value="${draft.hints.clearedMessage}" placeholder="(show nothing)"></div>
+              <div class="field"><label for="rs-chat-cleared">When the GM clears the chat</label><input class="input" id="rs-chat-cleared" maxlength="200" value="${draft.hints.chatClearedMessage}" placeholder="(show nothing)"></div>
+              <div class="field"><label>Preview</label><div class="chat-preview" id="rs-chat-preview"></div></div>
+            </div></div>
             <div>
               <div class="row mb-8"><h3 class="grow">Saved hints</h3><button class="btn btn-sm" id="rs-add-preset"><i class="icon-plus"></i>Add hint</button></div>
               <p class="muted small mb-8">Pre-written hints appear as one-click buttons in the GM console. Group them by puzzle.</p>
@@ -491,6 +502,25 @@
           markDirty();
         });
         panel.querySelector('#rs-hint-limit').oninput = (e) => { draft.hints.limit = parseInt(e.target.value, 10) || 0; markDirty(); };
+
+        // Immersion wording + live preview of how chat looks on the player screen
+        function drawChatPreview() {
+          const t = new Date().toLocaleTimeString();
+          const gm = draft.hints.gmName || 'GM';
+          const pl = draft.hints.playerName || 'Player';
+          panel.querySelector('#rs-chat-preview').innerHTML = html`
+            <div>[${t}] ${pl}: We found the key, what now?</div>
+            <div>[${t}] ${gm}: Try the lock on the old trunk.</div>
+            ${draft.hints.chatClearedMessage.trim() ? raw(html`<div class="cleared">[${t}] ${draft.hints.chatClearedMessage}</div>`) : ''}
+            ${draft.hints.clearedMessage.trim() ? raw(html`<div class="cleared-hint">Hint area after clearing: “${draft.hints.clearedMessage}”</div>`) : raw('<div class="cleared-hint">Hint area after clearing: empty</div>')}`;
+        }
+        [['#rs-gm-name', 'gmName', 'GM'], ['#rs-player-name', 'playerName', 'Player']].forEach(([sel, key, fallback]) => {
+          panel.querySelector(sel).oninput = (e) => { draft.hints[key] = e.target.value.trim() || fallback; markDirty(); drawChatPreview(); };
+        });
+        [['#rs-hints-cleared', 'clearedMessage'], ['#rs-chat-cleared', 'chatClearedMessage']].forEach(([sel, key]) => {
+          panel.querySelector(sel).oninput = (e) => { draft.hints[key] = e.target.value; markDirty(); drawChatPreview(); };
+        });
+        drawChatPreview();
 
         const list = panel.querySelector('#rs-presets');
         function drawPresets() {
@@ -731,6 +761,7 @@
     } catch (err) { return error(err); }
     state.system = system;
     const ai = settings.ai;
+    const autoClear = settings.autoClear || { enabled: true, minutes: 15 };
 
     view.innerHTML = html`
       <div class="settings-grid">
@@ -763,6 +794,19 @@
         </section>
 
         <section class="card">
+          <div class="card-head"><i class="icon-eraser" style="color:var(--success);font-size:18px"></i><div class="grow"><h2>Between games</h2><div class="sub">Keep the last group's hints off the next group's screen</div></div></div>
+          <div class="card-body stack">
+            <label class="switch"><input type="checkbox" id="st-autoclear" ${autoClear.enabled ? 'checked' : ''}><span class="track"></span>Automatically clear hints and chat when a room is idle</label>
+            <div class="row row-wrap" id="st-autoclear-row" ${autoClear.enabled ? '' : 'hidden'}>
+              <span class="small muted">Clear after</span>
+              <input class="input input-sm" type="number" min="1" max="240" id="st-autoclear-min" value="${autoClear.minutes}" style="width:80px">
+              <span class="small muted">minutes with the timer stopped or paused and nothing new sent</span>
+            </div>
+            <div class="hint">Player screens are wiped quietly (no “cleared” message) and pop-ups are closed. Nothing is cleared while a timer is running, and the Game Master console logs when it happens.</div>
+          </div>
+        </section>
+
+        <section class="card">
           <div class="card-head"><i class="icon-server" style="color:var(--info);font-size:18px"></i><div class="grow"><h2>Server</h2><div class="sub">Version ${system.version} · Node ${system.node}</div></div></div>
           <div class="card-body stack">
             <div class="field"><label>This dashboard</label><div class="copy-field"><code>${system.origin}</code><button class="btn btn-ghost btn-icon btn-xs" data-copy="${system.origin}"><i class="icon-copy"></i></button></div></div>
@@ -784,6 +828,20 @@
       </div>`;
 
     view.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copy(b.dataset.copy));
+
+    const acToggle = view.querySelector('#st-autoclear');
+    const acMinutes = view.querySelector('#st-autoclear-min');
+    async function saveAutoClear() {
+      const minutes = Number(acMinutes.value);
+      if (!(minutes >= 1 && minutes <= 240)) { acMinutes.classList.add('invalid'); return toast('Choose between 1 and 240 minutes', 'warning'); }
+      acMinutes.classList.remove('invalid');
+      try {
+        const res = await put('/api/v2/settings', { autoClear: { enabled: acToggle.checked, minutes } });
+        toast(res.autoClear.enabled ? `Idle rooms will be cleared after ${res.autoClear.minutes} min` : 'Automatic clearing turned off', 'success', { timeout: 2200 });
+      } catch (err) { error(err); }
+    }
+    acToggle.onchange = () => { view.querySelector('#st-autoclear-row').hidden = !acToggle.checked; saveAutoClear(); };
+    acMinutes.onchange = saveAutoClear;
     const modeBtns = view.querySelectorAll('#st-mode button');
     const syncMode = () => modeBtns.forEach(b => b.classList.toggle('active', b.dataset.v === QC.uiTheme()));
     modeBtns.forEach(b => b.onclick = () => { if (QC.uiTheme() !== b.dataset.v) QC.toggleUiTheme(); syncMode(); });

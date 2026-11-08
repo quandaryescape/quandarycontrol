@@ -309,11 +309,18 @@
         $('#chat-unread').textContent = `${S.unread} new`;
       }
       card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
-      logActivity('info', 'icon-message-circle', html`Players: “${m.message}”`);
+      logActivity('info', 'icon-message-circle', html`${chatNames().players}: “${m.message}”`);
     }
   });
-  socket.on('clear_chat', () => {
-    $('#chat-log').innerHTML = '<div class="bubble system">Chat cleared</div>';
+  socket.on('clear_chat', (data) => {
+    $('#chat-log').innerHTML = `<div class="bubble system">${data && data.reason === 'idle' ? 'Chat cleared automatically (room was idle)' : 'Chat cleared'}</div>`;
+  });
+
+  // Server cleared player screens after the room sat idle between games
+  socket.on('auto_cleared', (d) => {
+    const what = [d.hints && 'hints', d.chat && 'chat'].filter(Boolean).join(' and ') || 'pop-ups';
+    logActivity('info', 'icon-eraser', `Player screens cleared automatically (${esc(what)}) after ${Number(d.minutes) || 15} idle minutes`);
+    toast(`Idle room: cleared ${what} on player screens`, 'info', { timeout: 6000 });
   });
   let typingTimer;
   socket.on('typing', ({ sender }) => {
@@ -323,13 +330,21 @@
     typingTimer = setTimeout(() => { $('#chat-typing').hidden = true; }, 3000);
   });
 
+  /** Labels for chat bubbles, using the room's custom chat names when set. */
+  function chatNames() {
+    const h = (S.room && S.room.hints) || {};
+    const gm = h.gmName && h.gmName !== 'GM' ? `You as ${h.gmName}` : 'You';
+    const players = h.playerName && h.playerName !== 'Player' ? h.playerName : 'Players';
+    return { gm, players };
+  }
+
   function addBubble(m) {
     const log = $('#chat-log');
     const empty = log.querySelector('.chat-empty');
     if (empty) empty.remove();
     const b = document.createElement('div');
     b.className = `bubble ${m.sender === 'gm' ? 'gm' : m.sender === 'player' ? 'player' : 'system'}`;
-    b.innerHTML = html`${m.message}<small>${m.sender === 'gm' ? 'You' : 'Players'} · ${new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>`;
+    b.innerHTML = html`${m.message}<small>${m.sender === 'gm' ? chatNames().gm : chatNames().players} · ${new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>`;
     log.appendChild(b);
     log.scrollTop = log.scrollHeight;
   }

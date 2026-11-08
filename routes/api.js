@@ -7,6 +7,7 @@ const fs = require('fs');
 const multer = require('multer');
 
 const { getServices } = require('../src/services/registry');
+const { publicRoomRow, publicHints } = require('../src/services/room-privacy');
 const { createUpload } = require('../src/routes/upload');
 
 /**
@@ -71,7 +72,7 @@ router.get('/rooms', (req, res) => {
   try {
     const db = getDatabase();
     const rooms = db.prepare('SELECT * FROM rooms ORDER BY created_at DESC').all();
-    res.json({ success: true, data: rooms });
+    res.json({ success: true, data: rooms.map(publicRoomRow) });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -90,7 +91,7 @@ router.get('/rooms/:id', (req, res) => {
       return res.status(404).json({ success: false, error: 'Room not found' });
     }
 
-    res.json({ success: true, data: room });
+    res.json({ success: true, data: publicRoomRow(room) });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -109,7 +110,7 @@ router.get('/shortcode/:shortcode', (req, res) => {
       return res.status(404).json({ success: false, error: 'Room not found' });
     }
 
-    res.json({ success: true, data: room });
+    res.json({ success: true, data: publicRoomRow(room) });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -547,7 +548,7 @@ router.get('/rooms/:id/hints', (req, res) => {
       hints = {};
     }
 
-    res.json({ success: true, data: hints });
+    res.json({ success: true, data: publicHints(hints) });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
