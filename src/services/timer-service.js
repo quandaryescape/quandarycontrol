@@ -36,6 +36,7 @@ class TimerService {
       timersMap.set(roomId, {
         duration: d,
         configuredDuration: d,
+        speed: 1,
         remaining: d,
         interval: null,
         enabled: true,
@@ -105,7 +106,7 @@ class TimerService {
     timer.status = 'running';
     if (!timer.startedAt) timer.startedAt = new Date().toISOString();
     // Anchor on wall clock so drift from setInterval doesn't accumulate
-    timer.endsAt = Date.now() + timer.remaining * 1000;
+    timer.endsAt = Date.now() + timer.remaining * 1000 / timer.speed;
 
     timer.interval = setInterval(() => this.tick(roomId, type), 1000);
     if (typeof timer.interval.unref === 'function') timer.interval.unref();
@@ -116,12 +117,26 @@ class TimerService {
     return true;
   }
 
+  /** Change clock rate without jumping the countdown or losing fractional seconds. */
+  setSpeed(roomId, speed, type = 'main', io) {
+    const timer = this.mapFor(type).get(roomId);
+    if (!timer || !Number.isFinite(speed) || speed < 0.1 || speed > 2) return false;
+    const now = Date.now();
+    if (timer.interval) {
+      const remaining = Math.max(0, (timer.endsAt - now) * timer.speed / 1000);
+      timer.endsAt = now + remaining * 1000 / speed;
+    }
+    timer.speed = speed;
+    this.emit(roomId, type, io);
+    return true;
+  }
+
   tick(roomId, type) {
     const timer = this.mapFor(type).get(roomId);
     if (!timer || !timer.interval) return;
 
     const previous = timer.remaining;
-    timer.remaining = Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000));
+    timer.remaining = Math.max(0, Math.round((timer.endsAt - Date.now()) * timer.speed / 1000));
     if (timer.remaining === previous && timer.remaining > 0) return;
 
     this.emit(roomId, type);
@@ -153,7 +168,7 @@ class TimerService {
 
     clearInterval(timer.interval);
     timer.interval = null;
-    timer.remaining = Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000));
+    timer.remaining = Math.max(0, (timer.endsAt - Date.now()) * timer.speed / 1000);
     timer.status = 'paused';
 
     this.emit(roomId, type, io);
@@ -175,6 +190,7 @@ class TimerService {
     }
     timer.remaining = timer.duration;
     timer.status = 'ready';
+    timer.speed = 1;
     timer.startedAt = null;
 
     this.emit(roomId, type, io);
@@ -196,8 +212,8 @@ class TimerService {
     timer.duration = newDuration;
 
     if (timer.interval) {
-      timer.endsAt += delta * 1000;
-      timer.remaining = Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000));
+      timer.endsAt += delta * 1000 / timer.speed;
+      timer.remaining = Math.max(0, Math.round((timer.endsAt - Date.now()) * timer.speed / 1000));
     } else {
       timer.remaining = Math.max(0, Math.min(timer.duration, timer.remaining + delta));
     }
@@ -224,6 +240,7 @@ class TimerService {
     timer.duration = d;
     timer.remaining = d;
     timer.status = 'ready';
+    timer.speed = 1;
     timer.startedAt = null;
 
     this.emit(roomId, type, io);
@@ -240,11 +257,12 @@ class TimerService {
     if (!timer) return null;
 
     const remaining = timer.interval
-      ? Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000))
-      : timer.remaining;
+      ? Math.max(0, Math.round((timer.endsAt - Date.now()) * timer.speed / 1000))
+      : Math.round(timer.remaining);
 
     const state = {
       remaining,
+      speed: timer.speed,
       duration: timer.duration,
       running: !!timer.interval,
       status: timer.status,

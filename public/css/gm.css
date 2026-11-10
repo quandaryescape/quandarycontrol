@@ -175,3 +175,7 @@ body.gm { min-height: 100vh; background-attachment: fixed; background-size: cove
   .gm-top .spacer { display: none; }
   .timer-adjust .input-group { flex-basis: 100%; }
 }
+
+/* Speed changes are visible only in the GM console. */
+.timer-speed-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.timer-card.speed-modified { border-color: var(--warning); }

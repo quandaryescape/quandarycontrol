@@ -94,6 +94,11 @@
       $('#timer-progress').style.width = `${t.duration ? ((t.duration - t.remaining) / t.duration) * 100 : 0}%`;
       $('#timer-elapsed').textContent = `${formatTime(t.duration - t.remaining)} elapsed`;
       $('#timer-total').textContent = `of ${formatTime(t.duration)}`;
+      const speed = t.speed || 1;
+      const speedButton = $('#timer-speed');
+      speedButton.textContent = `Speed: ${speed}× · ${speed < 1 ? 'Slower' : speed > 1 ? 'Faster' : 'Normal'}`;
+      speedButton.classList.toggle('btn-warning', speed !== 1);
+      card.classList.toggle('speed-modified', speed !== 1);
       const badge = $('#timer-status');
       badge.className = `badge ${STATUS_BADGE[st]}`;
       badge.textContent = STATUS_LABEL[st];
@@ -145,6 +150,14 @@
     toast(`${sign}${formatTime(Math.abs(seconds))} ${type === 'secondary' ? 'secondary ' : ''}timer`, 'info', { timeout: 1500 });
   }
 
+  $$('[data-speed]').forEach(b => b.onclick = () => timerCmd('main', 'speed', Number(b.dataset.speed)));
+  $('#timer-speed').onclick = async () => {
+    const value = await QC.prompt({ title: 'Timer speed', label: 'Clock speed multiplier', hint: '1 = normal, 0.75 = three-quarter speed, 0.5 = half speed. Choose 0.1 to 2. Resetting the timer restores normal speed.', value: String(S.timers.main?.speed || 1) });
+    if (value === null) return;
+    const speed = Number(value);
+    if (!Number.isFinite(speed) || speed < 0.1 || speed > 2) return toast('Enter a speed between 0.1 and 2', 'warning');
+    timerCmd('main', 'speed', speed);
+  };
   $('#timer-toggle').onclick = toggleMain;
   $('#timer-reset').onclick = resetMain;
   $$('[data-adjust]').forEach(b => b.onclick = () => adjust('main', Number(b.dataset.adjust)));

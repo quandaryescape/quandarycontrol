@@ -617,6 +617,7 @@
    */
   QC.sortable = function (container, { items = ':scope > *', handle = null, axis = 'y', onEnd } = {}) {
     let dragEl = null, placeholder = null, startPos = 0, offset = 0;
+    let originalStyle = null, pointerId = null;
 
     function onDown(e) {
       if (e.button !== 0) return;
@@ -624,11 +625,23 @@
       if (!item || !container.contains(item)) return;
       if (handle && !e.target.closest(handle)) return;
       if (e.target.closest('input, textarea, select, [contenteditable="true"]') && !e.target.closest(handle || '__none__')) return;
-      e.preventDefault();
+      if (dragEl) return;
+      const control = e.target.closest('button, a, [role="button"]');
+      if (control && control !== item && !(handle && control.closest(handle))) return;
       dragEl = item;
+      pointerId = e.pointerId;
       const rect = item.getBoundingClientRect();
       startPos = axis === 'y' ? e.clientY : e.clientX;
       offset = axis === 'y' ? e.clientY - rect.top : e.clientX - rect.left;
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onCancel);
+    }
+
+    function beginDrag() {
+      const item = dragEl;
+      const rect = item.getBoundingClientRect();
+      originalStyle = item.getAttribute('style');
       placeholder = item.cloneNode(false);
       placeholder.style.height = `${rect.height}px`;
       placeholder.style.width = `${rect.width}px`;
@@ -639,12 +652,16 @@
         position: 'fixed', zIndex: 1000, width: `${rect.width}px`, height: `${rect.height}px`,
         left: `${rect.left}px`, top: `${rect.top}px`, pointerEvents: 'none', boxShadow: 'var(--shadow-lg)', opacity: '0.95'
       });
-      document.addEventListener('pointermove', onMove);
-      document.addEventListener('pointerup', onUp, { once: true });
+
     }
 
     function onMove(e) {
-      if (!dragEl) return;
+      if (!dragEl || e.pointerId !== pointerId) return;
+      if (!placeholder) {
+        if (Math.abs((axis === 'y' ? e.clientY : e.clientX) - startPos) < 5) return;
+        beginDrag();
+      }
+      e.preventDefault();
       if (axis === 'y') dragEl.style.top = `${e.clientY - offset}px`; else dragEl.style.left = `${e.clientX - offset}px`;
       const siblings = Array.from(container.querySelectorAll(items)).filter(el => el !== dragEl && el !== placeholder);
       const pos = axis === 'y' ? e.clientY : e.clientX;
@@ -658,23 +675,41 @@
       else if (siblings.length) siblings[siblings.length - 1].parentNode.insertBefore(placeholder, siblings[siblings.length - 1].nextSibling);
     }
 
-    function onUp(e) {
+    function finish(cancelled) {
       document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onCancel);
       if (!dragEl) return;
-      const moved = Math.abs((axis === 'y' ? e.clientY : e.clientX) - startPos) > 3;
-      placeholder.parentNode.insertBefore(dragEl, placeholder);
-      placeholder.remove();
-      dragEl.removeAttribute('style');
       const el = dragEl;
+      const dragged = !!placeholder;
+      if (placeholder) {
+        if (!cancelled) placeholder.parentNode.insertBefore(el, placeholder);
+        placeholder.remove();
+        if (originalStyle === null) el.removeAttribute('style');
+        else el.setAttribute('style', originalStyle);
+      }
       dragEl = null;
-      if (moved && onEnd) {
-        const ids = Array.from(container.querySelectorAll(items)).map(x => x.dataset.id);
-        onEnd(ids, el);
+      placeholder = null;
+      pointerId = null;
+      if (dragged && !cancelled) {
+        // Suppress only the click produced by this drag, never an ordinary click.
+        const suppress = e => { e.preventDefault(); e.stopImmediatePropagation(); };
+        container.addEventListener('click', suppress, { capture: true, once: true });
+        setTimeout(() => container.removeEventListener('click', suppress, true), 0);
+        if (onEnd) onEnd(Array.from(container.querySelectorAll(items)).map(x => x.dataset.id), el);
       }
     }
 
+    function onUp(e) { if (e.pointerId === pointerId) finish(false); }
+    function onCancel(e) { if (e.pointerId === pointerId) finish(true); }
     container.addEventListener('pointerdown', onDown);
-    return { destroy: () => container.removeEventListener('pointerdown', onDown) };
+    const onNativeDrag = e => { if (dragEl) e.preventDefault(); };
+    container.addEventListener('dragstart', onNativeDrag);
+    return { destroy: () => {
+      finish(true);
+      container.removeEventListener('pointerdown', onDown);
+      container.removeEventListener('dragstart', onNativeDrag);
+    } };
   };
 
   /* --------------------------------------------------------------- dropzone */

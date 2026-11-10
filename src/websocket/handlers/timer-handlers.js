@@ -44,6 +44,10 @@ function setupTimerHandlers(socket, io, timerService) {
         result = timerService.adjustTimer(roomId, amount, 'main', io);
         break;
 
+      case 'speed':
+        result = timerService.setSpeed(roomId, amount, 'main', io);
+        break;
+
       case 'reset':
         result = timerService.resetTimer(roomId, amount, 'main', io);
         break;
