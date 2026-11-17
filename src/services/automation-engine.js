@@ -564,6 +564,9 @@ class AutomationEngine {
   }
 
   onRoomEvent(roomId, eventName, payload = {}) {
+    if (this.games) {
+      try { this.games.onRoomEvent(roomId, eventName); } catch (err) { /* game history must never block automations */ }
+    }
     return this.handleEvent(roomId, { type: 'event', event: eventName, payload });
   }
 

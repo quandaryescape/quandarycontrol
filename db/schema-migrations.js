@@ -248,6 +248,36 @@ const MIGRATIONS = [
         if (changed) update.run(JSON.stringify(vars), room.id);
       }
     }
+  },
+  {
+    id: '2026_11_game_history',
+    up(db) {
+      // One row per played game (see services/game-log-service.js). No foreign key:
+      // history is kept when a room is deleted, with the room's name snapshotted.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS games (
+          id TEXT PRIMARY KEY,
+          room_id TEXT NOT NULL,
+          room_name TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'in_progress',
+          started_at TEXT NOT NULL,
+          ended_at TEXT,
+          end_reason TEXT,
+          duration_seconds INTEGER NOT NULL DEFAULT 0,
+          elapsed_seconds INTEGER NOT NULL DEFAULT 0,
+          remaining_seconds INTEGER NOT NULL DEFAULT 0,
+          hints INTEGER NOT NULL DEFAULT 0,
+          player_messages INTEGER NOT NULL DEFAULT 0,
+          gm_messages INTEGER NOT NULL DEFAULT 0,
+          result TEXT,
+          team_name TEXT NOT NULL DEFAULT '',
+          notes TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_games_started ON games (started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_games_room_started ON games (room_id, started_at DESC);
+      `);
+    }
   }
 ];
 

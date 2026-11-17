@@ -12,6 +12,7 @@ router.use(require('./automations'));
 router.use(require('./uploads'));
 router.use(require('./themes'));
 router.use(require('./system'));
+router.use(require('./games'));
 router.use('/hooks', require('./hooks'));
 
 // JSON 404 for unknown v2 endpoints

@@ -606,11 +606,43 @@
     { label: 'Slideshows', icon: 'icon-presentation', onClick: () => window.open(`/room/${roomId}/slideshows`, '_blank') },
     { label: 'Automations', icon: 'icon-zap', onClick: () => window.open(`/room/${roomId}/automations`, '_blank') },
     { label: 'Edit player theme', icon: 'icon-palette', onClick: () => window.open(`/theme-builder/${S.room ? S.room.theme : ''}?room=${roomId}`, '_blank') },
+    { label: 'Game history', icon: 'icon-history', onClick: openGameHistory },
     'divider',
     { label: 'Sounds & room look', icon: 'icon-swatch-book', onClick: openSettings },
     { label: 'Keyboard shortcuts', icon: 'icon-keyboard', onClick: showShortcuts },
     { label: 'Toggle light / dark', icon: 'icon-sun-moon', onClick: QC.toggleUiTheme }
   ]);
+
+  /* ============================================================ game history */
+  async function openGameHistory() {
+    let data;
+    try { data = await get(`/api/v2/games?room=${encodeURIComponent(roomId)}&limit=20`); } catch (err) { return error(err); }
+    const body = document.createElement('div');
+    body.className = 'stack';
+    const draw = () => {
+      body.innerHTML = data.items.length
+        ? html`${raw(QC.games.table(data.items, { showRoom: false }))}
+          <div class="row small muted"><span class="grow">${data.total > data.items.length ? `Latest ${data.items.length} of ${data.total} games` : `${data.total} game${data.total === 1 ? '' : 's'}`}</span><a href="/#games/${roomId}" target="_blank" rel="noopener">Open full history <i class="icon-external-link"></i></a></div>`
+        : '<div class="empty"><div class="empty-icon"><i class="icon-history"></i></div><h3>No games yet</h3><p>Games are added automatically once the timer has been running for a while (10 minutes by default, set in the dashboard Settings).</p></div>';
+      QC.games.bind(body, data.items, (g) => {
+        const i = data.items.findIndex(x => x.id === g.id);
+        if (i < 0) return;
+        if (g.deleted) { data.items.splice(i, 1); data.total--; } else data.items[i] = g;
+        draw();
+      });
+    };
+    draw();
+    modal({ title: `Game history · ${S.room ? S.room.name : ''}`, size: 'lg', icon: 'icon-history', body });
+  }
+
+  // When a game finishes, offer to record whether they escaped
+  socket.on('game_ended', (g) => {
+    if (!g) return;
+    toast(`Game saved to history · ${formatTime(g.elapsed)} played${g.remaining ? `, ${formatTime(g.remaining)} left` : ''}`, 'success', {
+      timeout: 15000,
+      action: { label: 'Add result', onClick: () => QC.games.edit(g).then(u => { if (u) toast('Game saved', 'success', { timeout: 1500 }); }) }
+    });
+  });
 
   function showShortcuts() {
     modal({

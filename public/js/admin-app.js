@@ -49,10 +49,12 @@
       state.live[p.roomId] = { ...(state.live[p.roomId] || {}), players: p.players, gms: p.gms };
       updateLive(p.roomId);
     });
+    socket.on('game_updated', (g) => gameChanged(g));
+    socket.on('game_deleted', (g) => gameChanged({ ...g, deleted: true }));
   }
 
   /* ----------------------------------------------------------------- routing */
-  const routes = { rooms: renderRooms, themes: renderThemes, settings: renderSettings };
+  const routes = { rooms: renderRooms, games: renderGames, themes: renderThemes, settings: renderSettings };
   function route() {
     const key = (location.hash || '#rooms').slice(1).split('/')[0];
     const fn = routes[key] || renderRooms;
@@ -209,6 +211,7 @@
       { label: 'Room settings', icon: 'icon-settings-2', onClick: () => openRoomDrawer(room.id) },
       { label: 'Slideshows', icon: 'icon-presentation', onClick: () => { location.href = `/room/${room.id}/slideshows`; } },
       { label: 'Automations & integrations', icon: 'icon-zap', onClick: () => { location.href = `/room/${room.id}/automations`; } },
+      { label: 'Game history', icon: 'icon-history', onClick: () => { location.hash = `#games/${room.id}`; } },
       { label: 'Edit player theme', icon: 'icon-palette', onClick: () => { location.href = `/theme-builder/${encodeURIComponent(room.theme)}?room=${room.id}`; } },
       'divider',
       { label: 'Copy player link', icon: 'icon-link', onClick: () => copy(`${origin()}/p/${room.shortcode}`, 'Player link copied') },
@@ -281,7 +284,7 @@
   async function deleteRoom(room) {
     const ok = await confirm({
       title: `Delete “${room.name}”?`,
-      message: `This permanently removes the room with its <strong>${room.stats.slideshows} slideshow(s)</strong>, <strong>${room.stats.automations} automation(s)</strong>, variables and media list. Uploaded files stay on disk. This cannot be undone.`,
+      message: `This permanently removes the room with its <strong>${room.stats.slideshows} slideshow(s)</strong>, <strong>${room.stats.automations} automation(s)</strong>, variables and media list. Uploaded files stay on disk and its game history is kept. This cannot be undone.`,
       confirmText: 'Delete room',
       danger: true
     });
@@ -652,6 +655,91 @@
     body.querySelector(`.tab[data-tab="${tab}"]`).click();
   }
 
+  /* =========================================================== GAME HISTORY */
+  const games = { items: [], total: 0, room: '', minMinutes: 10 };
+  const PAGE = 50;
+
+  async function loadGames({ more = false } = {}) {
+    const q = new URLSearchParams({ limit: PAGE, offset: more ? games.items.length : 0 });
+    if (games.room) q.set('room', games.room);
+    const data = await get(`/api/v2/games?${q}`);
+    games.items = more ? games.items.concat(data.items) : data.items;
+    games.total = data.total;
+  }
+
+  async function renderGames() {
+    title.textContent = 'Game history';
+    games.room = decodeURIComponent(location.hash.split('/')[1] || '');
+    view.innerHTML = document.getElementById('tpl-loading').innerHTML;
+    try {
+      const [, , cfg] = await Promise.all([
+        state.rooms.length ? null : loadRooms(),
+        loadGames(),
+        get('/api/v2/settings').catch(() => null)
+      ]);
+      if (cfg && cfg.gameLog) games.minMinutes = cfg.gameLog.minMinutes;
+    } catch (err) {
+      view.innerHTML = html`<div class="empty"><div class="empty-icon"><i class="icon-wifi-off"></i></div><h3>Could not load game history</h3><p>${err.message}</p><button class="btn" onclick="location.reload()">Retry</button></div>`;
+      return;
+    }
+    topActions.innerHTML = html`
+      <select class="select input-sm" id="games-room" aria-label="Room" style="width:200px">
+        <option value="">All rooms</option>
+        ${raw(state.rooms.map(r => html`<option value="${r.id}" ${r.id === games.room ? 'selected' : ''}>${r.name}</option>`).join(''))}
+      </select>`;
+    topActions.querySelector('#games-room').onchange = (e) => {
+      location.hash = e.target.value ? `#games/${encodeURIComponent(e.target.value)}` : '#games';
+    };
+    drawGames();
+  }
+
+  function drawGames() {
+    if (!location.hash.startsWith('#games')) return;
+    const room = state.rooms.find(r => r.id === games.room);
+    const how = `A game is added once a room's timer has run for ${games.minMinutes} minute${games.minMinutes === 1 ? '' : 's'}, so test starts that are reset sooner aren't saved.`;
+    if (!games.items.length) {
+      view.innerHTML = html`
+        <div class="card"><div class="empty">
+          <div class="empty-icon"><i class="icon-history"></i></div>
+          <h3>${room ? `No games in ${room.name} yet` : 'No games yet'}</h3>
+          <p>${how} <a href="#settings">Change this in Settings</a>.</p>
+        </div></div>`;
+      return;
+    }
+    view.innerHTML = html`
+      <div class="stack">
+        <div class="muted small">${games.total} game${games.total === 1 ? '' : 's'}${room ? ` in ${room.name}` : ''} · ${how} <a href="#settings">Settings</a></div>
+        <div class="card" data-games>${raw(QC.games.table(games.items, { showRoom: !games.room }))}</div>
+        ${games.items.length < games.total ? raw(`<div class="row" style="justify-content:center"><button class="btn" id="games-more">Show more (${games.total - games.items.length} older)</button></div>`) : ''}
+      </div>`;
+    QC.games.bind(view.querySelector('[data-games]'), games.items, gameChanged);
+    const more = view.querySelector('#games-more');
+    if (more) {
+      more.onclick = async () => {
+        more.classList.add('loading');
+        try { await loadGames({ more: true }); drawGames(); } catch (err) { error(err); more.classList.remove('loading'); }
+      };
+    }
+  }
+
+  /** A game was started, ended, edited or deleted (here or live from the server). */
+  function gameChanged(g) {
+    const i = games.items.findIndex(x => x.id === g.id);
+    if (g.deleted) {
+      if (i < 0) return;
+      games.items.splice(i, 1);
+      games.total = Math.max(0, games.total - 1);
+    } else if (i >= 0) {
+      games.items[i] = g;
+    } else if (!games.room || games.room === g.roomId) {
+      games.items.unshift(g);
+      games.total++;
+    } else {
+      return;
+    }
+    drawGames();
+  }
+
   /* ================================================================= THEMES */
   async function renderThemes() {
     title.textContent = 'Player themes';
@@ -762,6 +850,7 @@
     state.system = system;
     const ai = settings.ai;
     const autoClear = settings.autoClear || { enabled: true, minutes: 15 };
+    const gameLog = settings.gameLog || { minMinutes: 10 };
 
     view.innerHTML = html`
       <div class="settings-grid">
@@ -783,6 +872,18 @@
               <span class="small muted">minutes with the timer stopped or paused and nothing new sent</span>
             </div>
             <div class="hint">Player screens are wiped quietly (no “cleared” message) and pop-ups are closed. Nothing is cleared while a timer is running, and the Game Master console logs when it happens.</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><i class="icon-history" style="color:var(--accent);font-size:18px"></i><div class="grow"><h2>Game history</h2><div class="sub">Every game played is listed under <a href="#games">Game history</a></div></div></div>
+          <div class="card-body stack">
+            <div class="row row-wrap">
+              <span class="small muted">Count a game once the timer has run for</span>
+              <input class="input input-sm" type="number" min="1" max="60" id="st-gamelog-min" value="${gameLog.minMinutes}" style="width:80px">
+              <span class="small muted">minutes</span>
+            </div>
+            <div class="hint">Starts that are reset sooner (testing the room, a false start) aren't saved. A game ends when time runs out or the timer is reset – if you pause first, it ends at the moment you paused, with the time left on the clock.</div>
           </div>
         </section>
 
@@ -842,6 +943,17 @@
     }
     acToggle.onchange = () => { view.querySelector('#st-autoclear-row').hidden = !acToggle.checked; saveAutoClear(); };
     acMinutes.onchange = saveAutoClear;
+    const glMinutes = view.querySelector('#st-gamelog-min');
+    glMinutes.onchange = async () => {
+      const minMinutes = Number(glMinutes.value);
+      if (!(minMinutes >= 1 && minMinutes <= 60)) { glMinutes.classList.add('invalid'); return toast('Choose between 1 and 60 minutes', 'warning'); }
+      glMinutes.classList.remove('invalid');
+      try {
+        const res = await put('/api/v2/settings', { gameLog: { minMinutes } });
+        games.minMinutes = res.gameLog.minMinutes;
+        toast(`Games count after ${res.gameLog.minMinutes} min of play`, 'success', { timeout: 2200 });
+      } catch (err) { error(err); }
+    };
     const modeBtns = view.querySelectorAll('#st-mode button');
     const syncMode = () => modeBtns.forEach(b => b.classList.toggle('active', b.dataset.v === QC.uiTheme()));
     modeBtns.forEach(b => b.onclick = () => { if (QC.uiTheme() !== b.dataset.v) QC.toggleUiTheme(); syncMode(); });

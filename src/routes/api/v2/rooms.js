@@ -211,7 +211,8 @@ router.put('/rooms/:id', asyncRoute(async (req, res) => {
 
 router.delete('/rooms/:id', asyncRoute(async (req, res) => {
   const room = requireRoom(req.params.id);
-  const { timerService, automationEngine, idleClear } = services();
+  const { timerService, automationEngine, idleClear, gameLog } = services();
+  if (gameLog) gameLog.forget(room.id); // close its game first; history is kept
   getDatabase().prepare('DELETE FROM rooms WHERE id = ?').run(room.id);
   if (idleClear) idleClear.forget(room.id);
   timerService.clearRoomTimers(room.id);

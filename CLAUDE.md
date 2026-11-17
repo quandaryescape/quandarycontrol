@@ -47,6 +47,7 @@ Some older suites (`tests/integration/*`, `tests/secondary-timer.spec.js`) were 
   - `theme-service.js` – filesystem themes (`themes/<slug>/index.html|style.css|script.js|theme-config.json|assets/`). Slugs are validated; `boilerplate` is read-only.
   - `ai-service.js` – OpenRouter calls for the Theme Builder (`<summary>` + `<file name="…">` response format).
   - `idle-clear-service.js` – between-games cleanup: when no timer is running and nothing new has been sent for N minutes (setting `auto_clear_enabled` / `auto_clear_minutes`, default on / 15), emits silent `clear_hints`, `clear_chat` and `close_overlays` to the room and `auto_cleared` to the GM. Hints/chat/overlay sends call `idleClear.touch()`; manual clears call `cleared()`.
+  - `game-log-service.js` – game history (`games` table). A main-timer start begins a game in memory; it is saved once it has run `game_log_min_minutes` of game time (default 10, or the whole timer if shorter), so test starts are dropped. It ends on time-up, reset or stop (ended at the pause time if paused first). Counts `hint_sent` / `player_message` / `gm_message` via `AutomationEngine.onRoomEvent`. Open games are closed as `interrupted` at boot; deleting a room keeps its history.
   - `settings-service.js`, `preview-store.js` (in-memory theme drafts for live preview), `registry.js` (service access for legacy modules).
 - `db/database.js` + `db/schema-migrations.js` – run-once, additive migrations tracked in `schema_migrations`. Legacy columns are never dropped so older branches can open the same DB. Legacy `config.triggers` / `secondaryTimerTriggers` were imported into `automations`; legacy rules media into a "Rules" slideshow.
 - `utils/shortcode-parser.js` – renders a theme's `index.html` (shortcodes like `[timer]`, `[hints]`, `[chat]`, `[media]`, `[room-info field="name"]`) and injects required scripts once. `renderDraft()` powers the builder preview.
@@ -54,12 +55,13 @@ Some older suites (`tests/integration/*`, `tests/secondary-timer.spec.js`) were 
 ### Routes
 - Pages (`src/routes/web-routes.js`): `/` admin dashboard (rooms · themes · settings), `/room/:id/gm`, `/room/:id/automations`, `/room/:id/slideshows` (studio), `/room/:id/rules-slideshow` (player: 1 show → plays, 2+ → chooser), `/room/:id/slideshow/:showId`, `/room/:id/player` (themed player; `?themePreview=token&editor=1&demo=1` for the builder), `/p/:code`, `/s/:code`, `/theme-builder/:slug`, `/tv`.
 - `/api/v2/*` (`src/routes/api/v2/`): rooms (structured settings incl. `appearance`, hint presets, GM notes), variables (incl. hardware GET endpoints `.../variables/:name/set?value=`, `increment`, `toggle`), timer control (`/rooms/:idOrCode/timer/:command`), hints, slideshows, automations (+ test, duplicate, webhook key rotation, logs), uploads, themes (+ preview drafts, assets), settings, AI, system info. Room endpoints accept the room id **or** short code.
+- `/api/v2/games` (`?room=&limit=&offset=`), `PUT|DELETE /api/v2/games/:id` (team name, result `escaped`/`failed`, notes); threshold via `PUT /api/v2/settings { gameLog: { minMinutes } }`.
 - `/api/hooks/:key` – inbound webhooks (responds within ~3 s even if actions include waits).
 - `/api/*` (`routes/api.js`) and `/api/v1/*` – legacy endpoints kept for existing themes and hardware; variable routes delegate to `VariableService`.
 
 ### WebSocket events (main)
 - Client → server: `join_room {roomId, clientType: gm|player|preview}`, `join_admin`, `join_dashboard`, `timer_control` / `secondary_timer_control`, `sendHint`, `chat_message`, `typing`, `show_lightbox`, `show_message`, `set_variable`, `run_automation` (ack), `start_slideshow`, `close_overlays`, `reload_players`, `play_sound`.
-- Server → clients: `timer_update`, `secondary_timer_update`, `timer_complete`, `variableUpdate`, `variable_updated`, `hintReceived`, `chat_message`, `show_lightbox`, `show_message`, `play_sound`, `start_slideshow`, `reload_player`, `room_updated`, `presence`, `room_timer` / `room_presence` (dashboard), `automation_log`.
+- Server → clients: `timer_update`, `secondary_timer_update`, `timer_complete`, `variableUpdate`, `variable_updated`, `hintReceived`, `chat_message`, `show_lightbox`, `show_message`, `play_sound`, `start_slideshow`, `reload_player`, `room_updated`, `presence`, `room_timer` / `room_presence` (dashboard), `automation_log`, `game_started` / `game_ended` (GM), `game_updated` / `game_deleted` (dashboard).
 - `preview` clients receive updates but don't count as screens and don't fire `player_connected`.
 
 ### Frontend
@@ -67,6 +69,7 @@ Some older suites (`tests/integration/*`, `tests/secondary-timer.spec.js`) were 
 - Pages: `admin.html` + `js/admin-app.js`; `gm.html` + `js/gm-app.js`; `automations.html` + `js/automation-catalog.js` + `js/automations-app.js`; `slideshow-editor.html` + `js/slideshow-editor.js`; `rules-slideshow.html` + `js/slideshow-player.js`; `theme-builder.html` + `js/theme-builder*.js`.
 - Slides render through one shared renderer (`js/slideshow-render.js` + `css/slideshow.css`, container-query units with vw/vh fallbacks for old TV browsers).
 - Theme Builder: Visual / Code / AI share one draft with undo/redo. The preview iframe runs `js/theme-preview-bridge.js` (selection, toolbar, drag/drop targeting, instant CSS). Visual-editor styles live in a managed block in `style.css` between `/* === qb:visual-start === */` and `/* === qb:visual-end === */`, keyed by `qb-xxxxxx` classes.
+- Game history UI (`js/game-history.js`, `QC.games`: table, edit dialog) is shared by the dashboard `#games` page and the GM console (⋯ → Game history, plus an "Add result" toast when a game ends).
 - Every themed player page also gets `js/player-overlays.js` (styled messages, slideshow launch, remote reload).
 - Per-room appearance (`config.appearance = { accent, background, timerFont, icon }`) colours the dashboard card and tints the GM console so GMs can tell rooms apart. `icon` must be an image uploaded to this server (`/uploads/…` or a theme asset); `QC.roomAvatar()` renders it, falling back to initials.
 - The legacy grid layout system in `player.js` only runs if a theme opts in with `<body data-legacy-layout="true">`.
